@@ -5,13 +5,14 @@ import {
   action,
   internalQuery,
   mutation,
-  query,
   type ActionCtx,
 } from './_generated/server';
 import { internal } from './_generated/api';
 import { computeCostUsd, GEMINI_GROUNDING_EST_USD } from './pricing';
 import { runGeminiWithFallback } from './gemini';
 import { COMPANY_RESEARCH_SYSTEM_PROMPT } from './prompts/company_research_system';
+import { deletePipelineState } from './outreachRuns';
+import { deleteLegacyArtifacts, hasActiveSends } from './send';
 import {
   normalizeCompanyDomain,
   slugify,
@@ -29,6 +30,7 @@ interface ResearchArgs {
 
 interface ResearchPromptArgs extends ResearchArgs {
   excludedCompanyDomains: string[];
+  outreachTarget: { niche: string; offer: string };
 }
 
 interface CompanyResearchCandidate {
@@ -120,10 +122,11 @@ function parseResearchResponse(
 
 /** Build the grounded research request payload sent to Gemini. */
 function buildResearchContents(args: ResearchPromptArgs): string {
-  const { excludedCompanyDomains, ...researchCriteria } = args;
+  const { excludedCompanyDomains, outreachTarget, ...researchCriteria } = args;
   return JSON.stringify({
     role: 'company_research_request',
     instruction: COMPANY_RESEARCH_SYSTEM_PROMPT,
+    outreachTarget,
     researchCriteria,
     excludedCompanyDomains,
     request: `Find ${args.limit} companies.`,
@@ -171,10 +174,12 @@ export const research = action({
       internal.companies.listRecentlyEmailedDomains,
       { limit: 200 },
     );
+    const settings = await ctx.runQuery(internal.settings.current, {});
     const researchArgs = {
       ...args,
       limit: discoveryLimit,
       excludedCompanyDomains,
+      outreachTarget: { niche: settings.niche, offer: settings.offer },
     };
     const env = getDeploymentEnv();
     const freeKey = env.GEMINI_API_KEY;
@@ -321,90 +326,33 @@ export const importCompanies = mutation({
   },
 });
 
-/** List pipeline companies, deriving draft status from the artifacts table. */
-export const listCampaignCompanies = query({
-  args: {},
-  handler: async (ctx) => {
-    const companies = await ctx.db.query('companies').collect();
-    return Promise.all(
-      companies.map(async (company) => {
-        const artifact = await ctx.db
-          .query('artifacts')
-          .withIndex('by_companyId', (q) =>
-            q.eq('companyId', company.externalId),
-          )
-          .unique();
-        return {
-          id: company.externalId,
-          name: company.name,
-          industry: company.industry,
-          confidence: company.confidence,
-          status:
-            artifact?.status === 'completed'
-              ? ('drafted' as const)
-              : ('not-drafted' as const),
-          subject: artifact?.emailSubject ?? '',
-        };
-      }),
-    );
-  },
-});
-
-/** Clear the generated subject line on the given companies' artifacts. */
-export const clearSubjects = mutation({
-  args: { externalIds: v.array(v.string()) },
-  handler: async (ctx, { externalIds }) => {
-    for (const externalId of externalIds) {
-      const artifact = await ctx.db
-        .query('artifacts')
-        .withIndex('by_companyId', (q) => q.eq('companyId', externalId))
-        .unique();
-      if (artifact !== null && artifact.emailSubject !== undefined) {
-        await ctx.db.patch(artifact._id, { emailSubject: undefined });
-      }
-    }
-  },
-});
-
-/** Fetch a company's generated artifacts: the email text + a résumé PDF URL. */
-export const getCompanyArtifact = query({
-  args: { companyId: v.string() },
-  handler: async (ctx, { companyId }) => {
-    const artifact = await ctx.db
-      .query('artifacts')
-      .withIndex('by_companyId', (q) => q.eq('companyId', companyId))
-      .unique();
-    if (artifact === null) return null;
-    return {
-      emailTemplate: artifact.emailTemplate,
-      resumePdfUrl: artifact.resumePdfId
-        ? await ctx.storage.getUrl(artifact.resumePdfId)
-        : null,
-    };
-  },
-});
-
-/** Remove companies from the pipeline, along with any generated artifacts. */
+/**
+ * Remove companies from the pipeline with their runs, drafts, and legacy
+ * artifacts. Refuses companies with sends still queued, in flight, or awaiting
+ * review. Sent history in `sentEmails` is never removed.
+ */
 export const deleteCompanies = mutation({
   args: { externalIds: v.array(v.string()) },
   handler: async (ctx, { externalIds }) => {
+    for (const externalId of externalIds) {
+      if (await hasActiveSends(ctx, externalId)) {
+        const company = await ctx.db
+          .query('companies')
+          .withIndex('by_externalId', (q) => q.eq('externalId', externalId))
+          .unique();
+        throw new Error(
+          `${company?.name ?? externalId} has sends queued, in flight, or awaiting review. Cancel or resolve them first.`,
+        );
+      }
+    }
     for (const externalId of externalIds) {
       const company = await ctx.db
         .query('companies')
         .withIndex('by_externalId', (q) => q.eq('externalId', externalId))
         .unique();
-      if (company !== null) {
-        await ctx.db.delete(company._id);
-      }
-      // Drafted companies have an artifact; remove it too. (No-op otherwise.)
-      const artifact = await ctx.db
-        .query('artifacts')
-        .withIndex('by_companyId', (q) => q.eq('companyId', externalId))
-        .unique();
-      if (artifact !== null) {
-        await ctx.db.delete(artifact._id);
-      }
-      // Contacts are embedded on the company doc, so they go with it.
+      if (company !== null) await ctx.db.delete(company._id);
+      await deletePipelineState(ctx, externalId);
+      await deleteLegacyArtifacts(ctx, externalId);
     }
   },
 });

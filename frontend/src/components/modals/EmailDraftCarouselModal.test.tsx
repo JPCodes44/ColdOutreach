@@ -10,7 +10,6 @@ const drafts: EmailDraft[] = [
     to: 'a@x.com',
     subject: 'Alpha',
     body: ['Hi A'],
-    attachmentName: 'a.pdf',
   },
   { id: 'b', to: 'b@x.com', subject: 'Beta', body: ['Hi B'] },
   { id: 'c', to: 'c@x.com', subject: 'Gamma', body: ['Hi C'] },
@@ -28,7 +27,6 @@ function renderModal(
     onDiscard: vi.fn(),
     onEdit: vi.fn(),
     onApprove: vi.fn(),
-    onShowResume: vi.fn(),
     ...overrides,
   };
   render(<EmailDraftCarouselModal {...props} />);
@@ -41,22 +39,21 @@ describe('EmailDraftCarouselModal', () => {
     expect(screen.getByText('Reviewing 2 of 3')).toBeInTheDocument();
     expect(screen.getByText('Beta')).toBeInTheDocument();
 
-    await userEvent.click(
-      screen.getByRole('button', { name: 'Approve & Send' }),
-    );
+    await userEvent.click(screen.getByRole('button', { name: 'Looks good' }));
     expect(onApprove).toHaveBeenCalledWith('b');
 
     await userEvent.click(screen.getByRole('button', { name: 'Next draft' }));
     expect(onNext).toHaveBeenCalledTimes(1);
   });
 
-  it('opens the résumé preview when the active card attachment is clicked', async () => {
-    // Active draft (index 0) carries the attachment chip.
-    const { onShowResume } = renderModal({ activeIndex: 0 });
-    await userEvent.click(
-      screen.getByRole('button', { name: 'View résumé a.pdf' }),
-    );
-    expect(onShowResume).toHaveBeenCalledTimes(1);
+  it('hides actions whose handlers are not provided', () => {
+    renderModal({ onDiscard: undefined, onEdit: undefined });
+    expect(screen.queryByRole('button', { name: 'Discard' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'Looks good' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/résumé/i)).toBeNull();
   });
 
   it('disables Previous on the first draft', () => {

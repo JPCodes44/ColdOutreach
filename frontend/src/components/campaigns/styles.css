@@ -15,12 +15,7 @@
   background: #f7f9fb;
 }
 
-.campaignHeaderText,
-.drawerHeading,
-.drawerBody,
-.drawerFooter,
-.drawerSection,
-.activityText {
+.campaignHeaderText {
   display: flex;
   flex-direction: column;
 }
@@ -61,17 +56,7 @@
 
 .campaignHeaderActions,
 .campaignSearch,
-.campaignFilterButton,
-.campaignScore,
-.artifactTop,
-.drawerHeader,
-.drawerSecondaryActions,
-.drawerPrimary,
-.drawerSectionTitle,
-.activityItem,
-.pathway,
-.pathwayStep,
-.pathwayDot {
+.campaignScore {
   display: flex;
   align-items: center;
 }
@@ -187,66 +172,6 @@
   cursor: not-allowed;
 }
 
-.campaignClearSubjectButton {
-  height: 36px;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0 16px;
-  border: 1px solid #c3c6d7;
-  border-radius: 4px;
-  background: #ffffff;
-  color: #434655;
-  font:
-    500 12px/16px Inter,
-    system-ui,
-    -apple-system,
-    sans-serif;
-  letter-spacing: 0.05em;
-  cursor: pointer;
-  transition: 160ms ease;
-}
-
-.campaignClearSubjectButton:hover:not(:disabled) {
-  background: #eceef0;
-}
-
-.campaignClearSubjectButton:disabled {
-  border-color: #d6d9e0;
-  color: #a1a4b2;
-  cursor: not-allowed;
-}
-
-.campaignSubjectGenButton {
-  height: 36px;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0 16px;
-  border: 1px solid #004ac6;
-  border-radius: 4px;
-  background: #ffffff;
-  color: #004ac6;
-  font:
-    500 12px/16px Inter,
-    system-ui,
-    -apple-system,
-    sans-serif;
-  letter-spacing: 0.05em;
-  cursor: pointer;
-  transition: 160ms ease;
-}
-
-.campaignSubjectGenButton:hover:not(:disabled) {
-  background: #dbe1ff;
-}
-
-.campaignSubjectGenButton:disabled {
-  border-color: #c3c6d7;
-  color: #a1a4b2;
-  cursor: not-allowed;
-}
-
 .campaignCanvas {
   display: flex;
   flex: 1;
@@ -313,7 +238,7 @@
 }
 
 /* Row loading state: shimmer a gradient across every text cell while the
-   company's templates/resumes are being generated. */
+   company's outreach pipeline run is in progress. */
 .campaignRowGenerating {
   cursor: progress;
 }
@@ -441,12 +366,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.campaignColTemplate {
-  flex: 1 1 130px;
-}
-.campaignColResume {
-  flex: 1 1 130px;
-}
 .campaignColScore {
   flex: 0 0 132px;
 }
@@ -507,7 +426,8 @@
   background: #006242;
 }
 
-/* Fill width per score, snapped to the nearest 5% by CampaignScore. */
+/* Fill width per score,
+snapped to the nearest 5% by CampaignScore. */
 .campaignScoreFill-0 {
   inline-size: 0%;
 }
@@ -582,318 +502,7 @@
   font-weight: 500;
 }
 
-.entityDrawer {
-  position: fixed;
-  right: 0;
-  top: 64px;
-  bottom: 0;
-  z-index: 30;
-  display: flex;
-  flex-direction: column;
-  width: min(500px, 100vw);
-  background: #ffffff;
-  border-left: 1px solid #c3c6d7;
-  box-shadow: 0 8px 16px rgba(27, 39, 51, 0.12);
-}
-
-.drawerHeader {
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-  padding: 16px;
-  border-bottom: 1px solid #c3c6d7;
-  background: #f7f9fb;
-}
-
-.drawerHeading {
-  gap: 2px;
-}
-
-.drawerEyebrow,
-.drawerCardTitle,
-.drawerSectionTitle {
-  font:
-    700 12px/16px Inter,
-    system-ui,
-    -apple-system,
-    sans-serif;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.drawerEyebrow {
-  color: #737686;
-}
-
-.drawerHeading h2 {
-  font:
-    600 18px/24px Inter,
-    system-ui,
-    -apple-system,
-    sans-serif;
-  color: #004ac6;
-}
-
-.drawerHeading p {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font:
-    400 13px/18px Inter,
-    system-ui,
-    -apple-system,
-    sans-serif;
-  color: #434655;
-}
-
-.drawerClose {
-  display: inline-flex;
-  padding: 6px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: #434655;
-  cursor: pointer;
-}
-
-.drawerClose:hover {
-  background: #e0e3e5;
-  color: #191c1e;
-}
-
-.drawerBody {
-  flex: 1;
-  gap: 24px;
-  overflow-y: auto;
-  padding: 20px;
-}
-
-.drawerCard {
-  padding: 16px;
-  border: 1px solid #c3c6d7;
-  border-radius: 8px;
-  background: #f2f4f6;
-}
-
-.drawerCardTitle {
-  margin-bottom: 16px;
-  color: #191c1e;
-}
-
-.pathway {
-  position: relative;
-  justify-content: space-between;
-}
-
-.pathwayTrack,
-.pathwayFill {
-  position: absolute;
-  left: 0;
-  top: 12px;
-  height: 2px;
-}
-
-.pathwayTrack {
-  width: 100%;
-  background: #e0e3e5;
-}
-
-.pathwayFill {
-  width: 60%;
-  background: #004ac6;
-}
-
-.pathwayStep {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-}
-
-.pathwayDot {
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 9999px;
-  border: 2px solid #f2f4f6;
-}
-
-.pathwayDot-done {
-  background: #004ac6;
-  color: #ffffff;
-}
-
-.pathwayDot-active {
-  background: #2563eb;
-  color: #ffffff;
-  border-color: #004ac6;
-}
-
-.pathwayDot-pending {
-  background: #e0e3e5;
-  color: #434655;
-}
-
-.pathwayLabel {
-  font:
-    500 10px/14px Inter,
-    system-ui,
-    -apple-system,
-    sans-serif;
-  color: #434655;
-}
-
-.pathwayLabel-active {
-  color: #004ac6;
-  font-weight: 700;
-}
-
-.drawerSection {
-  gap: 12px;
-}
-
-.drawerSectionTitle {
-  gap: 8px;
-  color: #191c1e;
-}
-
-.artifactList {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.artifactCard {
-  flex: 1 1 180px;
-  min-width: 0;
-  padding: 12px;
-  border: 1px solid #c3c6d7;
-  border-radius: 8px;
-  background: #f7f9fb;
-  cursor: pointer;
-  transition: 160ms ease;
-}
-
-.artifactCard:hover {
-  border-color: #004ac6;
-}
-
-.artifactTop {
-  justify-content: space-between;
-  margin-bottom: 8px;
-  color: #434655;
-}
-
-.artifactBadge {
-  padding: 2px 6px;
-  border-radius: 4px;
-  font:
-    700 9px/12px Inter,
-    system-ui,
-    -apple-system,
-    sans-serif;
-  text-transform: uppercase;
-}
-
-.artifactReady {
-  background: #d3e4fe;
-  color: #0b1c30;
-}
-
-.artifactPending {
-  background: #e0e3e5;
-  color: #434655;
-}
-
-.artifactName {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font:
-    500 13px/18px Inter,
-    system-ui,
-    -apple-system,
-    sans-serif;
-  color: #191c1e;
-}
-
-.artifactMeta {
-  margin-top: 4px;
-  font:
-    500 10px/14px Inter,
-    system-ui,
-    -apple-system,
-    sans-serif;
-  letter-spacing: 0.05em;
-  color: #434655;
-}
-
-.activityList {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border: 1px solid #c3c6d7;
-  border-radius: 8px;
-}
-
-.activityItem {
-  gap: 12px;
-  align-items: flex-start;
-  padding: 12px;
-  border-bottom: 1px solid #c3c6d7;
-  background: #ffffff;
-}
-
-.activityItem:last-child {
-  border-bottom: none;
-}
-
-.activityDot {
-  flex-shrink: 0;
-  width: 6px;
-  height: 6px;
-  margin-top: 6px;
-  border-radius: 9999px;
-  background: #e0e3e5;
-}
-
-.activityDot.active {
-  background: #004ac6;
-}
-
-.activityText {
-  gap: 2px;
-}
-
-.activityText p {
-  font:
-    400 13px/18px Inter,
-    system-ui,
-    -apple-system,
-    sans-serif;
-  color: #191c1e;
-}
-
-.activityText time {
-  font:
-    500 11px/14px Inter,
-    system-ui,
-    -apple-system,
-    sans-serif;
-  letter-spacing: 0.05em;
-  color: #434655;
-}
-
-.drawerFooter {
-  gap: 8px;
-  padding: 16px;
-  border-top: 1px solid #c3c6d7;
-}
-
-.generateButton,
-.drawerPrimary {
+.generateButton {
   height: 36px;
   display: flex;
   align-items: center;
@@ -914,46 +523,75 @@
   transition: 160ms ease;
 }
 
-.generateButton:hover,
-.drawerPrimary:hover {
+.generateButton:hover:not(:disabled) {
   background: #003da3;
 }
 
-.drawerSecondaryActions {
-  justify-content: space-between;
-  padding-top: 8px;
-  border-top: 1px dashed #c3c6d7;
-}
-
-.drawerSecondaryActions button {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  border: none;
-  background: transparent;
-  color: #434655;
-  font:
-    500 12px/16px Inter,
-    system-ui,
-    -apple-system,
-    sans-serif;
-  letter-spacing: 0.05em;
-  cursor: pointer;
-}
-
-.drawerSecondaryActions .danger {
-  color: #ba1a1a;
+.generateButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 @media (max-width: 1100px) {
   .campaignTableWrap {
     padding-right: 0;
   }
+}
 
-  .entityDrawer {
-    position: static;
-    width: 100%;
-    border-left: none;
-    border-top: 1px solid #c3c6d7;
-  }
+.campaignColDomain {
+  flex: 1 1 150px;
+}
+.campaignColReview {
+  flex: 0 0 90px;
+}
+.campaignColStatus {
+  flex: 0 0 200px;
+}
+
+.campaignStatusStack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.campaignStatusError {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font:
+    400 11px/14px Inter,
+    system-ui,
+    -apple-system,
+    sans-serif;
+  color: #ba1a1a;
+}
+
+.campaignNotice {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 24px 0;
+  padding: 10px 14px;
+  border: 1px solid #b4c5ff;
+  border-radius: 8px;
+  background: #eef3ff;
+  font:
+    400 13px/18px Inter,
+    system-ui,
+    -apple-system,
+    sans-serif;
+  color: #191c1e;
+}
+
+.campaignNoticeClose {
+  display: inline-flex;
+  padding: 2px;
+  border: none;
+  background: none;
+  color: #434655;
+  cursor: pointer;
 }

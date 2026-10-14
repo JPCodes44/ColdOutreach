@@ -1,0 +1,176 @@
+.settingsScreen {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.settingsTitle {
+  font:
+    600 32px/40px Inter,
+    system-ui,
+    -apple-system,
+    sans-serif;
+  letter-spacing: -0.02em;
+  color: #191c1e;
+  margin: 0;
+}
+
+.settingsSubtitle,
+.settingsLoading {
+  font:
+    400 16px/24px Inter,
+    system-ui,
+    -apple-system,
+    sans-serif;
+  color: #434655;
+  margin: 4px 0 0;
+}
+
+.settingsLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.settingsForm,
+.settingsNotice {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+  background: #ffffff;
+  border: 1px solid #c3c6d7;
+  border-radius: 8px;
+}
+
+.settingsField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settingsLabel {
+  font:
+    600 13px/18px Inter,
+    system-ui,
+    -apple-system,
+    sans-serif;
+  color: #191c1e;
+}
+
+.settingsRequired {
+  color: #ba1a1a;
+}
+
+.settingsInput {
+  font:
+    400 14px/20px Inter,
+    system-ui,
+    -apple-system,
+    sans-serif;
+  padding: 8px 12px;
+  border: 1px solid #c3c6d7;
+  border-radius: 4px;
+  color: #191c1e;
+  background: #ffffff;
+}
+
+.settingsInput:focus {
+  outline: 2px solid #2563eb;
+  outline-offset: -1px;
+}
+
+.settingsTextarea {
+  resize: vertical;
+}
+
+.settingsFieldMeta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font:
+    400 12px/16px Inter,
+    system-ui,
+    -apple-system,
+    sans-serif;
+  color: #737686;
+}
+
+.settingsCountOver {
+  color: #ba1a1a;
+  font-weight: 600;
+}
+
+.settingsActions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.settingsSaveButton {
+  height: 40px;
+  padding: 0 24px;
+  border: none;
+  border-radius: 4px;
+  background: #2563eb;
+  color: #ffffff;
+  font:
+    500 13px/16px Inter,
+    system-ui,
+    -apple-system,
+    sans-serif;
+  cursor: pointer;
+}
+
+.settingsSaveButton:disabled {
+  background: #c3c6d7;
+  cursor: not-allowed;
+}
+
+.settingsSide {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settingsNotice p {
+  margin: 0;
+  font:
+    400 14px/20px Inter,
+    system-ui,
+    -apple-system,
+    sans-serif;
+  color: #434655;
+}
+
+.settingsNotice .settingsVersion {
+  font-weight: 600;
+  color: #191c1e;
+}
+
+.settingsStatus {
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: 4px;
+  background: #e6f4ea;
+  color: #1e6b34;
+  font:
+    500 14px/20px Inter,
+    system-ui,
+    -apple-system,
+    sans-serif;
+}
+
+.settingsStatusError {
+  background: #ffdad6;
+  color: #93000a;
+}
+
+@media (max-width: 900px) {
+  .settingsLayout {
+    grid-template-columns: 1fr;
+  }
+}

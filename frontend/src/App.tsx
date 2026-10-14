@@ -1,29 +1,31 @@
 import { useState } from 'react';
 import { ConvexProvider, ConvexReactClient } from 'convex/react';
+import './components/shell/styles.css';
 import './components/campaigns/styles.css';
 import './components/email-table/styles.css';
 import './components/outreach/styles.css';
-import './components/jobs/styles.css';
+import './components/outreach-review/styles.css';
 import './components/draft-review/styles.css';
 import './components/schedule/styles.css';
+import './components/history/styles.css';
+import './components/settings/styles.css';
 import './components/modals/styles.css';
 import './components/account/styles.css';
 import { CampaignsScreen } from './components/campaigns/Campaigns';
 import { DraftReviewScreen } from './components/draft-review/DraftReview';
 import { EmailTableScreen } from './components/email-table/EmailTable';
-import { GenerationJobsScreen, TopBar } from './components/jobs/GenerationJobs';
+import { HistoryScreen } from './components/history/HistoryScreen';
+import { OutreachReviewScreen } from './components/outreach-review/OutreachReviewScreen';
 import { ScheduleSubmissionScreen } from './components/schedule/ScheduleSubmission';
-import { jobsNavItems } from './components/jobs/data';
+import { SettingsScreen } from './components/settings/SettingsScreen';
+import { TopBar } from './components/shell/TopBar';
+import { navItems } from './components/shell/navItems';
 import { Sidebar } from './components/outreach/Sidebar';
 import { Screen } from './components/outreach/Screen';
 import { OutreachProvider } from './components/outreach/OutreachContext';
 
-const companyPageId = 'companies';
-const campaignsPageId = 'campaigns';
-const emailTablePageId = 'email-table';
-const draftsPageId = 'drafts';
-const schedulePageId = 'schedule';
-const brand = { title: 'Outreach OS', subtitle: 'Enterprise Outreach' };
+const brand = { title: 'ColdOutreach', subtitle: 'Business Outreach' };
+const flushPages = new Set(['campaigns', 'email-table']);
 
 const convexUrl = import.meta.env.VITE_CONVEX_URL;
 if (!convexUrl) {
@@ -31,11 +33,49 @@ if (!convexUrl) {
 }
 const convex = new ConvexReactClient(convexUrl);
 
-/** App root — swaps between implemented Outreach OS screens. */
+/** App root — swaps between the outreach workflow screens. */
 export function App() {
-  const [activePage, setActivePage] = useState(companyPageId);
-  // Companies checked on Draft Review, carried to the Schedule Submission screen.
+  const [activePage, setActivePage] = useState('companies');
+  // Company opened from the Pipeline, shown on the Review page.
+  const [reviewCompanyId, setReviewCompanyId] = useState<string | undefined>();
+  // Companies checked on the Send page, carried to Schedule.
   const [sendCompanyIds, setSendCompanyIds] = useState<string[]>([]);
+
+  const pages: Record<string, JSX.Element> = {
+    companies: <Screen onViewCompanies={() => setActivePage('campaigns')} />,
+    campaigns: (
+      <CampaignsScreen
+        onOpenReview={(id) => {
+          setReviewCompanyId(id);
+          setActivePage('review');
+        }}
+      />
+    ),
+    review: (
+      <OutreachReviewScreen
+        companyId={reviewCompanyId}
+        onBack={() => setActivePage('campaigns')}
+      />
+    ),
+    'email-table': <EmailTableScreen />,
+    drafts: (
+      <DraftReviewScreen
+        onContinue={(ids) => {
+          setSendCompanyIds(ids);
+          setActivePage('schedule');
+        }}
+        onBack={() => setActivePage('email-table')}
+      />
+    ),
+    schedule: (
+      <ScheduleSubmissionScreen
+        companyIds={sendCompanyIds}
+        onBack={() => setActivePage('drafts')}
+      />
+    ),
+    history: <HistoryScreen />,
+    settings: <SettingsScreen />,
+  };
 
   return (
     <ConvexProvider client={convex}>
@@ -43,46 +83,16 @@ export function App() {
         <div className="appShell">
           <Sidebar
             brand={brand}
-            items={jobsNavItems}
+            items={navItems}
             activeId={activePage}
             onSelect={setActivePage}
           />
           <main className="appMain">
             <TopBar />
             <div
-              className={`appPage ${
-                activePage === campaignsPageId ||
-                activePage === emailTablePageId
-                  ? 'appPageFlush'
-                  : ''
-              }`}
+              className={`appPage ${flushPages.has(activePage) ? 'appPageFlush' : ''}`}
             >
-              {activePage === companyPageId ? (
-                <Screen
-                  onViewCompanies={() => setActivePage(campaignsPageId)}
-                />
-              ) : activePage === campaignsPageId ? (
-                <CampaignsScreen
-                  onViewDraftReview={() => setActivePage(draftsPageId)}
-                />
-              ) : activePage === emailTablePageId ? (
-                <EmailTableScreen />
-              ) : activePage === draftsPageId ? (
-                <DraftReviewScreen
-                  onContinue={(ids) => {
-                    setSendCompanyIds(ids);
-                    setActivePage(schedulePageId);
-                  }}
-                  onBack={() => setActivePage(emailTablePageId)}
-                />
-              ) : activePage === schedulePageId ? (
-                <ScheduleSubmissionScreen
-                  companyIds={sendCompanyIds}
-                  onBack={() => setActivePage(draftsPageId)}
-                />
-              ) : (
-                <GenerationJobsScreen />
-              )}
+              {pages[activePage] ?? pages.companies}
             </div>
           </main>
         </div>

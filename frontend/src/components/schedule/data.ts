@@ -1,9 +1,5 @@
-import type {
-  DeliveryOption,
-  DispatchSummary,
-  SelectOption,
-  TargetEntity,
-} from './types';
+import { zonedWallTimeToUtcMs } from '@emailstrat/common';
+import type { DeliveryOption, SelectOption, TargetEntity } from './types';
 
 export const timeOptions: SelectOption[] = [
   { value: 'now', label: 'Immediately' },
@@ -35,35 +31,46 @@ export const deliveryOptions: DeliveryOption[] = [
   },
 ];
 
-export const targetEntities: TargetEntity[] = [
-  {
-    id: 'acme',
-    name: 'Acme Corp',
-    initial: 'A',
-    segment: 'Enterprise Segment',
-    contacts: 2,
-  },
-  {
-    id: 'startup',
-    name: 'Startup Inc',
-    initial: 'S',
-    segment: 'Growth Segment',
-    contacts: 3,
-  },
-  {
-    id: 'beta',
-    name: 'Beta Labs',
-    initial: 'B',
-    segment: 'Innovation Segment',
-    contacts: 1,
-  },
-];
-
-export const dispatchSummary: DispatchSummary = {
-  totalCompanies: 3,
-  approvedDrafts: 3,
-  totalEmailsQueued: 6,
+const TZ_TO_IANA: Record<string, string> = {
+  pst: 'America/Los_Angeles',
+  est: 'America/New_York',
+  utc: 'UTC',
+  cet: 'Europe/Berlin',
 };
 
-/** Default submission date shown when the screen first opens. */
-export const defaultSubmissionDate = '2023-11-15';
+/** Convert a wall-clock date+time in the chosen timezone to a UTC timestamp (ms). */
+export function computeScheduledAtMs(
+  date: string,
+  time: string,
+  tzValue: string,
+): number {
+  if (time === 'now') return Date.now();
+  return zonedWallTimeToUtcMs(date, time, TZ_TO_IANA[tzValue] ?? 'UTC');
+}
+
+/** Today as YYYY-MM-DD for the date input's default. */
+export function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/** Label + chip class for a target entity's readiness/send state. */
+export function targetStatus(entity: TargetEntity): {
+  label: string;
+  className: string;
+} {
+  if (entity.status === 'Sent')
+    return { label: 'Sent', className: 'scheduleStatusSent' };
+  if (entity.status === 'Sending')
+    return { label: 'Scheduled', className: 'scheduleStatusScheduled' };
+  if (entity.status === 'Needs Review')
+    return { label: 'Needs review', className: 'scheduleStatusAttention' };
+  if (entity.ready === false) {
+    return {
+      label: entity.contacts === 0 ? 'No recipients' : 'Not approved',
+      className: 'scheduleStatusAttention',
+    };
+  }
+  if (entity.status === 'Failed')
+    return { label: 'Failed', className: 'scheduleStatusAttention' };
+  return { label: 'Ready', className: 'scheduleStatusNotScheduled' };
+}

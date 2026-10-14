@@ -1,95 +1,90 @@
 import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
-import { nonEmptyStrings, parsePlainEmailTemplate } from '@emailstrat/common';
+import {
+  nonEmptyStrings,
+  renderOutreachEmail,
+  splitParagraphs,
+} from '@emailstrat/common';
+import { draftState, type DraftState } from './outreachRuns';
 
-/** Rows for the Email Table: drafted companies plus contact-only not-drafted rows. */
+const DRAFT_LABELS: Record<DraftState, string> = {
+  none: 'Not Drafted',
+  running: 'Generating',
+  ready: 'Needs Approval',
+  approved: 'Approved',
+  failed: 'Generation Failed',
+  legacy: 'Legacy Draft',
+};
+
+function hasRecipient(company: {
+  email1?: string;
+  email2?: string;
+  email3?: string;
+}): boolean {
+  return (
+    nonEmptyStrings([company.email1, company.email2, company.email3]).length > 0
+  );
+}
+
+/**
+ * Rows for the Email Table: every company with a generated draft or at least
+ * one recipient. `status` is the send status once drafted, else the draft state.
+ */
 export const listEmailTableRows = query({
   args: {},
   handler: async (ctx) => {
     const companies = await ctx.db.query('companies').collect();
-    const rows: {
-      companyId: string;
-      company: string;
-      email1: string;
-      email2: string;
-      email3: string;
-      status: string;
-      // Carried along for the send flow; not shown as grid columns.
-      emailTemplate: string;
-      resumePdfUrl: string | null;
-    }[] = [];
-
+    const rows = [];
     for (const company of companies) {
-      const hasRecipientEmail = Boolean(
-        company.email1?.trim() ||
-          company.email2?.trim() ||
-          company.email3?.trim(),
-      );
-      const artifact = await ctx.db
-        .query('artifacts')
-        .withIndex('by_companyId', (q) => q.eq('companyId', company.externalId))
-        .unique();
-      // Drafted companies always appear; not-drafted companies appear only if
-      // they already have recipient emails to review or remove.
-      if (artifact?.status !== 'completed' && !hasRecipientEmail) continue;
-
+      const { state } = await draftState(ctx, company.externalId);
+      const drafted = state === 'ready' || state === 'approved';
+      if (!drafted && !hasRecipient(company)) continue;
+      const sendStatus = company.emailStatus ?? 'Not Sent';
       rows.push({
         companyId: company.externalId,
         company: company.name,
         email1: company.email1 ?? '',
         email2: company.email2 ?? '',
         email3: company.email3 ?? '',
+        draftState: state,
         status:
-          artifact?.status === 'completed'
-            ? (company.emailStatus ?? 'Not Sent')
-            : 'Not Drafted',
-        emailTemplate: artifact?.emailTemplate ?? '',
-        resumePdfUrl:
-          artifact?.resumePdfId !== undefined
-            ? await ctx.storage.getUrl(artifact.resumePdfId)
-            : null,
+          drafted || sendStatus !== 'Not Sent'
+            ? sendStatus
+            : DRAFT_LABELS[state],
       });
     }
-
     rows.sort((a, b) => a.company.localeCompare(b.company));
     return rows;
   },
 });
 
-/**
- * Every company in the DB that has at least one non-empty recipient email,
- * regardless of draft status. Powers the read-only "Companies with contacts"
- * table; subscribed on screen mount and torn down on unmount via `useQuery`.
- */
+/** Companies with at least one recipient email, with draft readiness. */
 export const listCompaniesWithEmails = query({
   args: {},
   handler: async (ctx) => {
     const companies = await ctx.db.query('companies').collect();
-    const rows = companies
-      .filter((company) =>
-        Boolean(
-          company.email1?.trim() ||
-          company.email2?.trim() ||
-          company.email3?.trim(),
-        ),
-      )
-      .map((company) => ({
+    const rows = [];
+    for (const company of companies.filter(hasRecipient)) {
+      const { state } = await draftState(ctx, company.externalId);
+      rows.push({
         companyId: company.externalId,
         company: company.name,
         email1: company.email1 ?? '',
         email2: company.email2 ?? '',
         email3: company.email3 ?? '',
         status: company.emailStatus ?? 'Not Sent',
-      }));
+        draftState: state,
+        draftLabel: DRAFT_LABELS[state],
+      });
+    }
     rows.sort((a, b) => a.company.localeCompare(b.company));
     return rows;
   },
 });
 
 /**
- * The clicked company's email cards for the review carousel — one per non-empty
- * recipient email (To = a single address), each carrying the generated subject,
- * body, and résumé attachment. Subscribed on row click, torn down on close.
+ * One preview card per recipient for the company's current outreach draft,
+ * rendered exactly as it would be queued (plain-text paragraphs + HTML).
  */
 export const getCompanyEmailDrafts = query({
   args: { companyId: v.string() },
@@ -99,39 +94,25 @@ export const getCompanyEmailDrafts = query({
       .withIndex('by_externalId', (q) => q.eq('externalId', companyId))
       .unique();
     if (company === null) return [];
-
-    const artifact = await ctx.db
-      .query('artifacts')
-      .withIndex('by_companyId', (q) => q.eq('companyId', companyId))
-      .unique();
-
-    const { subjectLine, bodyParagraphs } = parsePlainEmailTemplate(
-      artifact?.emailTemplate ?? '',
-    );
-    const subject =
-      artifact?.emailSubject ?? subjectLine ?? `Outreach to ${company.name}`;
-    const attachmentName =
-      artifact?.resumePdfId !== undefined
-        ? `${company.name}_Resume.pdf`
-        : undefined;
-
-    const emails = nonEmptyStrings([
+    const { draft } = await draftState(ctx, companyId);
+    if (draft === null) return [];
+    const rendered = renderOutreachEmail(draft.content);
+    return nonEmptyStrings([
       company.email1,
       company.email2,
       company.email3,
-    ]);
-
-    return emails.map((to, index) => ({
+    ]).map((to, index) => ({
       id: `${companyId}-${index}`,
       to,
-      subject,
-      body: bodyParagraphs,
-      ...(attachmentName !== undefined ? { attachmentName } : {}),
+      subject: rendered.subject,
+      body: splitParagraphs(rendered.text),
+      html: rendered.html,
+      approved: draft.status === 'approved',
     }));
   },
 });
 
-/** Persist a single manually-edited email cell for a company. */
+/** Persist manually-edited recipient cells for a company. */
 export const setEmailRow = mutation({
   args: {
     companyId: v.string(),
@@ -145,12 +126,10 @@ export const setEmailRow = mutation({
       .withIndex('by_externalId', (q) => q.eq('externalId', args.companyId))
       .unique();
     if (company === null) return;
-
-    // Patch only the fields that were actually provided so unset ones aren't wiped.
     const patch: { email1?: string; email2?: string; email3?: string } = {};
-    if (args.email1 !== undefined) patch.email1 = args.email1;
-    if (args.email2 !== undefined) patch.email2 = args.email2;
-    if (args.email3 !== undefined) patch.email3 = args.email3;
+    if (args.email1 !== undefined) patch.email1 = args.email1.trim();
+    if (args.email2 !== undefined) patch.email2 = args.email2.trim();
+    if (args.email3 !== undefined) patch.email3 = args.email3.trim();
     await ctx.db.patch(company._id, patch);
   },
 });

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "convex dev",
     "deploy": "convex deploy",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@emailstrat/common": "*",
@@ -17,6 +18,9 @@
     "openai": "^4.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.7.2"
+    "@edge-runtime/vm": "5.0.0",
+    "convex-test": "0.0.38",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
   }
 }

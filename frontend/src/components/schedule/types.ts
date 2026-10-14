@@ -9,7 +9,7 @@ export interface DeliveryOption {
   description: string;
 }
 
-/** A company queued for submission. */
+/** A company selected for submission (from `send:getScheduleSummary`). */
 export interface TargetEntity {
   id: string;
   name: string;
@@ -18,6 +18,9 @@ export interface TargetEntity {
   segment: string;
   contacts: number;
   status?: string;
+  draftState?: string;
+  /** Approved draft and at least one recipient. */
+  ready?: boolean;
 }
 
 /** Aggregate counters shown in the dispatch summary panel. */
@@ -27,6 +30,10 @@ export interface DispatchSummary {
   totalEmailsQueued: number;
 }
 
+export interface ScheduleSummary extends DispatchSummary {
+  entities: TargetEntity[];
+}
+
 /** An option in a `<select>` field. */
 export interface SelectOption {
   value: string;
@@ -34,26 +41,20 @@ export interface SelectOption {
 }
 
 export interface ScheduleSubmissionScreenProps {
-  /** Companies checked on Draft Review, to be queued for sending. */
+  /** Companies checked on the Send screen, to be queued. */
   companyIds?: string[];
-  /** Returns to the Draft Review screen (Back link and Cancel). */
+  /** Returns to the Send screen (Back link and Cancel). */
   onBack?: () => void;
 }
 
 export interface ScheduleHeaderProps {
   onBack?: () => void;
-  /** Queues the outreach for the chosen schedule. */
+  /** Queues the approved snapshots for the chosen schedule. */
   onSchedule?: () => void;
-  /** Queues the outreach as app drafts without scheduling a provider send. */
-  onScheduleDrafts?: () => void;
   /** True while the enqueue mutation is in flight. */
   scheduling?: boolean;
-  /** True while draft creation is in flight. */
-  drafting?: boolean;
-  /** False when there are no companies to schedule. */
+  /** False when the selection cannot be scheduled. */
   canSchedule?: boolean;
-  /** False when there are no companies to draft. */
-  canDraft?: boolean;
 }
 
 export interface SchedulingOptionsProps {
@@ -75,7 +76,7 @@ export interface DeliveryOptionCardProps {
 
 export interface TargetEntitiesProps {
   entities: TargetEntity[];
-  selectedIds?: Set<string>;
+  selectedIds?: ReadonlySet<string>;
   onToggleSelected?: (companyId: string) => void;
   onToggleAll?: () => void;
   onUnschedule?: () => void;
@@ -83,6 +84,19 @@ export interface TargetEntitiesProps {
   canUnschedule?: boolean;
 }
 
+export interface TargetEntityRowProps {
+  entity: TargetEntity;
+  selected: boolean;
+  onToggleSelected?: (companyId: string) => void;
+}
+
 export interface DispatchSummaryProps {
   summary: DispatchSummary;
+}
+
+export interface ScheduleSelectProps {
+  label: string;
+  value: string;
+  options: SelectOption[];
+  onChange: (value: string) => void;
 }

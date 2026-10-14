@@ -79,34 +79,11 @@ export interface QualityMeterProps {
   total?: number;
 }
 
-export interface ModalStatusFooterProps {
-  /** Left status text, e.g. "System Safe". */
-  status: string;
-  /** Right detail text, e.g. "ID: GEN-50-AUTO". */
-  detail: string;
-}
-
-export interface ModalCodeFooterProps {
-  /** Left monospace code, e.g. "ERROR_CODE: TIMEOUT_0x442". */
-  code: string;
-  /** Right-aligned support label. */
-  supportLabel?: string;
-}
-
 export interface CompanyDiscoverySuccessModalProps {
   /** Number of newly discovered companies. */
   count: number;
   onDismiss: () => void;
   onViewCompanies: () => void;
-}
-
-export interface DraftGenerationSuccessModalProps {
-  /** Number of generated email templates. */
-  count: number;
-  /** Batch id shown in the footer, e.g. "GEN-50-AUTO". */
-  batchId?: string;
-  onDismiss: () => void;
-  onGoToDraftReview: () => void;
 }
 
 export interface ImportWarningModalProps {
@@ -123,42 +100,10 @@ export interface DeleteConfirmationModalProps {
   onConfirm: () => void;
 }
 
-export interface GenerationFailedModalProps {
-  /** Human-readable failure description. */
-  message: string;
-  /** Optional error code shown in the footer. */
-  errorCode?: string;
-  onDismiss: () => void;
-  onRetry: () => void;
-}
-
 export interface EmptySelectionModalProps {
   /** Body copy; defaults to a generic "select at least one" message. */
   message?: string;
   onDismiss: () => void;
-}
-
-export interface InsufficientCreditsModalProps {
-  /** Body copy; defaults to the generic generation-credits message. */
-  message?: string;
-  onUpgrade?: () => void;
-  onDismiss: () => void;
-}
-
-export interface EmailTemplateModalProps {
-  companyName: string;
-  /** The generated email text, or null when none exists. */
-  emailText: string | null;
-  loading: boolean;
-  onClose: () => void;
-}
-
-export interface ResumePdfModalProps {
-  companyName: string;
-  /** A URL to the stored résumé PDF, or null when none exists. */
-  pdfUrl: string | null;
-  loading: boolean;
-  onClose: () => void;
 }
 
 /** One email draft shown as a card in the review carousel. */
@@ -169,8 +114,6 @@ export interface EmailDraft {
   subject: string;
   /** Body paragraphs, rendered in order. */
   body: string[];
-  /** Optional attached file, shown as a chip in the card header. */
-  attachmentName?: string;
 }
 
 export interface EmailDraftCarouselModalProps {
@@ -180,9 +123,9 @@ export interface EmailDraftCarouselModalProps {
   onPrev: () => void;
   onNext: () => void;
   onClose: () => void;
-  onDiscard: (id: string) => void;
-  onEdit: (id: string) => void;
-  onApprove: (id: string) => void;
-  /** Open the résumé-PDF preview for the active card's company. */
-  onShowResume: () => void;
+  /** Optional actions; each button renders only when its handler is given. */
+  onDiscard?: (id: string) => void;
+  onEdit?: (id: string) => void;
+  /** Acknowledge the preview (does not send). */
+  onApprove?: (id: string) => void;
 }

@@ -16,14 +16,22 @@
 }
 
 .apiBalanceLabel {
-  font: 700 9px/12px Inter, system-ui, -apple-system, sans-serif;
+  font:
+    700 9px/12px Inter,
+    system-ui,
+    -apple-system,
+    sans-serif;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: #6b6f7a;
 }
 
 .apiBalanceValue {
-  font: 700 12px/14px Inter, system-ui, -apple-system, sans-serif;
+  font:
+    700 12px/14px Inter,
+    system-ui,
+    -apple-system,
+    sans-serif;
   color: #191c1e;
   font-variant-numeric: tabular-nums;
 }

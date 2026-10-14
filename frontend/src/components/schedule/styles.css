@@ -493,31 +493,14 @@
   color: #004ac6;
 }
 
-.scheduleStatusDrafted {
-  background: rgba(112, 64, 168, 0.1);
-  color: #7040a8;
+.scheduleStatusAttention {
+  background: #fff4e5;
+  color: #7a3e00;
 }
 
 .scheduleStatusNotScheduled {
   background: #eceef0;
   color: #505f76;
-}
-
-.scheduleEntityPreview {
-  display: inline-flex;
-  flex-shrink: 0;
-  padding: 6px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: #505f76;
-  cursor: pointer;
-  transition: 160ms ease;
-}
-
-.scheduleEntityPreview:hover {
-  background: #f2f4f6;
-  color: #004ac6;
 }
 
 /* ------------------------------------------------------ dispatch summary */

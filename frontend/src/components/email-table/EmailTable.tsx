@@ -5,6 +5,7 @@ import { HotTable, HotColumn } from '@handsontable/react-wrapper';
 import { registerAllModules } from 'handsontable/registry';
 import type { CellValue } from 'handsontable/common';
 import { DeleteConfirmationModal } from '../modals';
+import { errorMessage } from '../shared/errorMessage';
 import 'handsontable/styles/handsontable.min.css';
 import 'handsontable/styles/ht-theme-main.min.css';
 
@@ -17,9 +18,13 @@ interface EmailTableRow {
   email2: string;
   email3: string;
   status: string;
-  // Carried for the send flow; intentionally not shown as grid columns.
-  emailTemplate: string;
-  resumePdfUrl: string | null;
+  /** Pipeline draft state; not shown as a grid column. */
+  draftState: 'none' | 'running' | 'ready' | 'approved' | 'failed' | 'legacy';
+}
+
+/** Rows without a usable draft can be removed from the Recipients table. */
+function isUndrafted(row: EmailTableRow): boolean {
+  return row.draftState !== 'ready' && row.draftState !== 'approved';
 }
 
 const listEmailTableRowsQuery = makeFunctionReference<
@@ -76,8 +81,9 @@ export function EmailTableScreen() {
   const [pendingDeleteIds, setPendingDeleteIds] = useState<string[] | null>(
     null,
   );
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const companyIdsRef = useRef<string[]>([]);
-  const rowStatusesRef = useRef<string[]>([]);
+  const deletableRef = useRef<boolean[]>([]);
   const companyKeyRef = useRef('');
   const filteredRows = useMemo(() => {
     const loadedRows = rows ?? [];
@@ -90,13 +96,11 @@ export function EmailTableScreen() {
     if (deliveryFilter === 'not-sent') {
       return loadedRows.filter(
         (row) =>
-          row.status !== 'Sent' &&
-          row.status !== 'Failed' &&
-          row.status !== 'Not Drafted',
+          row.status !== 'Sent' && row.status !== 'Failed' && !isUndrafted(row),
       );
     }
     if (deliveryFilter === 'not-drafted') {
-      return loadedRows.filter((row) => row.status === 'Not Drafted');
+      return loadedRows.filter(isUndrafted);
     }
     return loadedRows;
   }, [rows, deliveryFilter]);
@@ -113,7 +117,7 @@ export function EmailTableScreen() {
     if (key === companyKeyRef.current) return;
     companyKeyRef.current = key;
     companyIdsRef.current = filteredRows.map((r) => r.companyId);
-    rowStatusesRef.current = filteredRows.map((r) => r.status);
+    deletableRef.current = filteredRows.map(isUndrafted);
     setGrid(
       filteredRows.map((r) => [
         r.company,
@@ -121,7 +125,7 @@ export function EmailTableScreen() {
         r.email2,
         r.email3,
         r.status,
-        r.status === 'Not Drafted' ? 'Delete' : '',
+        isUndrafted(r) ? 'Delete' : '',
       ]),
     );
   }, [rows, filteredRows, deliveryFilter]);
@@ -131,22 +135,35 @@ export function EmailTableScreen() {
     if (filteredCompanyIds.length === 0) return;
     setPendingDeleteIds(filteredCompanyIds);
   };
+  const removeCompanies = async (externalIds: string[]) => {
+    setDeleteError(null);
+    try {
+      await deleteCompanies({ externalIds });
+    } catch (error) {
+      setDeleteError(errorMessage(error, 'Delete failed.'));
+    }
+  };
   const confirmDeleteRows = async () => {
     if (pendingDeleteIds === null) return;
     const externalIds = pendingDeleteIds;
     setPendingDeleteIds(null);
-    await deleteCompanies({ externalIds });
+    await removeCompanies(externalIds);
   };
 
   return (
     <section className="emailTableScreen">
       <div className="emailTableHeader">
-        <h1 className="emailTableTitle">Email Table</h1>
+        <h1 className="emailTableTitle">Recipients</h1>
         <p className="emailTableSubtitle">
-          Add up to three recipient emails per drafted company. Edits save
+          Add up to three recipient emails per company. Edits save
           automatically.
         </p>
       </div>
+      {deleteError !== null ? (
+        <p className="emailTableError" role="alert">
+          {deleteError}
+        </p>
+      ) : null}
       <div className="emailTableCanvas">
         <section className="emailTableCard">
           <div className="emailTableToolbar">
@@ -200,10 +217,7 @@ export function EmailTableScreen() {
               colWidths={[220, 220, 220, 220, 120, 90]}
               rowHeights={32}
               cells={(row, col) => {
-                if (
-                  col === actionColumnIndex &&
-                  rowStatusesRef.current[row] === 'Not Drafted'
-                ) {
+                if (col === actionColumnIndex && deletableRef.current[row]) {
                   return {
                     readOnly: true,
                     className: 'emailTableActionCell',
@@ -216,12 +230,10 @@ export function EmailTableScreen() {
               }}
               afterOnCellMouseDown={(_event, coords) => {
                 if (coords.col !== actionColumnIndex || coords.row < 0) return;
-                if (rowStatusesRef.current[coords.row] !== 'Not Drafted') {
-                  return;
-                }
+                if (!deletableRef.current[coords.row]) return;
                 const companyId = companyIdsRef.current[coords.row];
                 if (companyId === undefined) return;
-                void deleteCompanies({ externalIds: [companyId] });
+                void removeCompanies([companyId]);
               }}
               afterChange={(changes, source) => {
                 if (changes === null || source === 'loadData') return;

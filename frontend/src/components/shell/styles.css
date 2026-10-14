@@ -1,0 +1,69 @@
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.appShell {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+  background: #f7f9fb;
+  color: #191c1e;
+}
+
+.appMain,
+.appPage {
+  display: flex;
+}
+
+.appMain {
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.shellTopBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  height: 64px;
+  padding: 0 16px;
+  flex-shrink: 0;
+  background: #ffffff;
+  border-bottom: 1px solid #c3c6d7;
+}
+
+.shellTopSpacer {
+  display: flex;
+  align-items: center;
+}
+
+.shellTopSpacer {
+  flex: 1;
+}
+
+.appPage {
+  flex: 1;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.appPageFlush {
+  gap: 0;
+  padding: 0;
+}

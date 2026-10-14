@@ -1,54 +1,115 @@
 import { defineSchema, defineTable } from 'convex/server';
 import { v } from 'convex/values';
 
-/**
- * Validator for an email content block — a discriminated union mirroring
- * `EmailBlock` in `@emailstrat/common`.
- */
-export const blockValidator = v.union(
-  v.object({ type: v.literal('text'), id: v.string(), content: v.string() }),
-  v.object({
-    type: v.literal('image'),
-    id: v.string(),
-    src: v.string(),
-    alt: v.string(),
+/** Structured, editable outreach email content (mirrors `OutreachEmailContent`). */
+export const outreachContentValidator = v.object({
+  subject: v.string(),
+  opening: v.string(),
+  findings: v.array(v.object({ text: v.string(), sourceUrl: v.string() })),
+  workflow: v.array(v.object({ name: v.string(), description: v.string() })),
+  dashboard: v.object({
+    title: v.string(),
+    metrics: v.array(v.object({ label: v.string(), description: v.string() })),
+    stages: v.array(v.string()),
   }),
-  v.object({
-    type: v.literal('button'),
-    id: v.string(),
-    label: v.string(),
-    href: v.string(),
+  closing: v.string(),
+  signature: v.string(),
+});
+
+export const settingsSnapshotValidator = v.object({
+  version: v.number(),
+  niche: v.string(),
+  offer: v.string(),
+  senderName: v.string(),
+  signature: v.string(),
+  customInstructions: v.string(),
+});
+
+export const evidenceValidator = v.object({
+  sources: v.array(
+    v.object({ url: v.string(), title: v.string(), fetchedAt: v.string() }),
+  ),
+  facts: v.array(
+    v.object({
+      id: v.string(),
+      kind: v.string(),
+      sourceUrl: v.string(),
+      text: v.string(),
+    }),
+  ),
+  skipped: v.array(v.object({ url: v.string(), reason: v.string() })),
+  /** Visible page text used as untrusted context (absent on older runs). */
+  excerpts: v.optional(
+    v.array(v.object({ url: v.string(), text: v.string() })),
+  ),
+});
+
+export const analysisValidator = v.object({
+  businessSummary: v.string(),
+  observations: v.array(
+    v.object({ text: v.string(), evidenceIds: v.array(v.string()) }),
+  ),
+  opportunities: v.array(
+    v.object({
+      title: v.string(),
+      observation: v.string(),
+      evidenceIds: v.array(v.string()),
+      hypothesis: v.string(),
+      suggestedImprovement: v.string(),
+    }),
+  ),
+  proposedWorkflow: v.array(
+    v.object({ name: v.string(), description: v.string() }),
+  ),
+  dashboard: v.object({
+    title: v.string(),
+    metrics: v.array(v.object({ label: v.string(), description: v.string() })),
+    stages: v.array(v.string()),
   }),
-  v.object({ type: v.literal('divider'), id: v.string() }),
+  droppedCount: v.number(),
+});
+
+export const runStageValidator = v.union(
+  v.literal('queued'),
+  v.literal('retrieving'),
+  v.literal('analyzing'),
+  v.literal('composing'),
+  v.literal('rendering'),
+  v.literal('done'),
+);
+
+export const queueStatusValidator = v.union(
+  v.literal('queued'),
+  /** Legacy app-draft rows from the job-application flow; never dispatched. */
+  v.literal('drafted'),
+  /** Claimed by a dispatcher; Gmail outcome not yet recorded. */
+  v.literal('sending'),
+  v.literal('sent'),
+  v.literal('failed'),
+  /** Gmail may or may not have accepted it; needs a human decision. */
+  v.literal('uncertain'),
+  v.literal('canceled'),
+  /** Legacy row without an approved snapshot; must be regenerated. */
+  v.literal('legacy-blocked'),
 );
 
 export default defineSchema({
-  templates: defineTable({
-    name: v.string(),
-    subject: v.string(),
-    blocks: v.array(blockValidator),
-    tags: v.array(v.string()),
-    createdAt: v.string(),
-    updatedAt: v.string(),
-  }).index('by_name', ['name']),
+  /**
+   * Legacy job-application artifacts (cold email + résumé). Retained only so
+   * existing documents stay valid; nothing reads, displays, or sends them.
+   */
   artifacts: defineTable({
     companyId: v.string(),
-    emailTemplate: v.string(),
-    /** Generated cold-email subject line (separate from the email body). */
+    emailTemplate: v.optional(v.string()),
     emailSubject: v.optional(v.string()),
-    /** The résumé LaTeX source (kept for re-compiling / debugging). */
-    resumeLatex: v.string(),
-    /** Stored PDF compiled from `resumeLatex`; absent if the compile failed. */
+    resumeLatex: v.optional(v.string()),
     resumePdfId: v.optional(v.id('_storage')),
-    status: v.union(
-      v.literal('pending'),
-      v.literal('completed'),
-      v.literal('failed'),
-    ),
-    createdAt: v.string(),
+    status: v.optional(v.string()),
+    createdAt: v.optional(v.string()),
+    obsoleteAt: v.optional(v.string()),
   }).index('by_companyId', ['companyId']),
   companies: defineTable({
-    /** The research-supplied id (domain); also used as `artifacts.companyId`. */
+    /** The research-supplied id (domain). */
     externalId: v.string(),
     name: v.string(),
     domain: v.string(),
@@ -63,7 +124,7 @@ export default defineSchema({
     email1: v.optional(v.string()),
     email2: v.optional(v.string()),
     email3: v.optional(v.string()),
-    /** Send status (read-only for now; a future send flow updates it). */
+    /** Denormalized send roll-up for list views. */
     emailStatus: v.optional(
       v.union(
         v.literal('Not Sent'),
@@ -71,14 +132,63 @@ export default defineSchema({
         v.literal('Sending'),
         v.literal('Sent'),
         v.literal('Failed'),
+        v.literal('Needs Review'),
       ),
     ),
     createdAt: v.string(),
   }).index('by_externalId', ['externalId']),
   /**
+   * Versioned outreach Settings. Every save inserts a new immutable version;
+   * runs record the version they used, so edits only affect future runs.
+   */
+  outreachSettings: defineTable({
+    version: v.number(),
+    niche: v.string(),
+    offer: v.string(),
+    senderName: v.string(),
+    signature: v.string(),
+    customInstructions: v.string(),
+    createdAt: v.string(),
+  }).index('by_version', ['version']),
+  /** One pipeline execution for one company, with its outputs or failure. */
+  pipelineRuns: defineTable({
+    companyId: v.string(),
+    status: v.union(
+      v.literal('running'),
+      v.literal('completed'),
+      v.literal('failed'),
+    ),
+    stage: runStageValidator,
+    settings: settingsSnapshotValidator,
+    startedAt: v.number(),
+    finishedAt: v.optional(v.number()),
+    error: v.optional(v.string()),
+    evidence: v.optional(evidenceValidator),
+    analysis: v.optional(analysisValidator),
+    content: v.optional(outreachContentValidator),
+    model: v.optional(v.string()),
+    /** False when a newer run had already produced the company's draft. */
+    appliedToDraft: v.optional(v.boolean()),
+  }).index('by_company', ['companyId', 'startedAt']),
+  /**
+   * The company's current reviewable outreach draft. Replaced only by a newer
+   * successful run; a failed run never touches it.
+   */
+  outreachDrafts: defineTable({
+    companyId: v.string(),
+    runId: v.id('pipelineRuns'),
+    runStartedAt: v.number(),
+    settingsVersion: v.number(),
+    content: outreachContentValidator,
+    status: v.union(v.literal('ready'), v.literal('approved')),
+    approvedAt: v.optional(v.string()),
+    editedAt: v.optional(v.string()),
+    createdAt: v.string(),
+    updatedAt: v.string(),
+  }).index('by_company', ['companyId']),
+  /**
    * Persistent history of companies with at least one successfully sent email.
-   * This survives active-pipeline cleanup and lets discovery filter locally
-   * without injecting the full history into an LLM prompt.
+   * Survives active-pipeline cleanup.
    */
   emailedCompanies: defineTable({
     normalizedDomain: v.string(),
@@ -88,10 +198,7 @@ export default defineSchema({
     lastSentAt: v.string(),
     sentCount: v.number(),
   }).index('by_normalizedDomain', ['normalizedDomain']),
-  /**
-   * Persistent recipient history. Rows are created when outreach is queued,
-   * drafted, or sent so the same person is not contacted twice.
-   */
+  /** Persistent history of recipients Gmail accepted a message for. */
   emailedRecipients: defineTable({
     normalizedEmail: v.string(),
     email: v.string(),
@@ -101,55 +208,83 @@ export default defineSchema({
     lastContactedAt: v.string(),
     contactCount: v.number(),
   }).index('by_normalizedEmail', ['normalizedEmail']),
-  /**
-   * Per-provider API credit tracker, one row per provider, surfaced in the
-   * navbar. `balanceUsd` is remaining $ (DeepSeek real; OpenAI + Gemini-paid
-   * estimated from token usage). The Gemini free key has no dollar cost, so it
-   * is tracked as a daily request counter instead.
-   */
+  /** Per-provider API credit tracker surfaced in the navbar. */
   providerBalances: defineTable({
     provider: v.union(
       v.literal('openai'),
       v.literal('deepseek'),
       v.literal('gemini'),
     ),
-    /** Remaining estimated/real USD (openai, deepseek, gemini paid tier). */
     balanceUsd: v.optional(v.number()),
-    /** Gemini free-key requests left in the current day (out of the daily cap). */
     freeRequestsRemaining: v.optional(v.number()),
-    /** ISO timestamp of the next midnight-Pacific reset for the free counter. */
     freeResetAt: v.optional(v.string()),
     updatedAt: v.string(),
   }).index('by_provider', ['provider']),
   /**
-   * The outreach send queue: one row per recipient email to dispatch. Populated
-   * by "Schedule Outreach" and drained by Convex's scheduler at each item's
-   * `scheduledAt`. Company-level visible state lives on `companies.emailStatus`.
+   * The send queue: one row per recipient. Active rows (queued, sending,
+   * uncertain) double as the recipient reservation. `snapshot` is the
+   * immutable approved content; later edits never change it.
    */
   sendQueue: defineTable({
-    /** Groups one "Schedule Outreach" submission. */
     batchId: v.string(),
     companyId: v.string(),
     /** Denormalized company name for display. */
     company: v.string(),
-    /** A single recipient address. */
+    /** The intended recipient. */
     to: v.string(),
     subject: v.string(),
-    status: v.union(
-      v.literal('queued'),
-      v.literal('drafted'),
-      v.literal('sent'),
-      v.literal('failed'),
-    ),
-    /** ISO timestamp at which this item dispatches. */
+    status: queueStatusValidator,
     scheduledAt: v.string(),
     createdAt: v.string(),
-    outlookDraftId: v.optional(v.string()),
-    draftedAt: v.optional(v.string()),
+    normalizedEmail: v.optional(v.string()),
+    companyDomain: v.optional(v.string()),
+    draftId: v.optional(v.id('outreachDrafts')),
+    runId: v.optional(v.id('pipelineRuns')),
+    snapshot: v.optional(
+      v.object({ subject: v.string(), text: v.string(), html: v.string() }),
+    ),
+    scheduledFunctionId: v.optional(v.id('_scheduled_functions')),
+    claimedAt: v.optional(v.string()),
+    /** Address actually used (differs from `to` under GMAIL_REDIRECT_TO). */
+    actualTo: v.optional(v.string()),
+    providerMessageId: v.optional(v.string()),
     sentAt: v.optional(v.string()),
     error: v.optional(v.string()),
+    resolvedAt: v.optional(v.string()),
+    /** Self-addressed smoke test: excluded from ledgers and roll-ups. */
+    isTest: v.optional(v.boolean()),
+    // Legacy Outlook-draft fields.
+    outlookDraftId: v.optional(v.string()),
+    draftedAt: v.optional(v.string()),
   })
     .index('by_company', ['companyId'])
     .index('by_batch', ['batchId'])
-    .index('by_status', ['status']),
+    .index('by_status', ['status'])
+    .index('by_normalizedEmail', ['normalizedEmail']),
+  /**
+   * Immutable record of every message Gmail accepted (or that a human
+   * confirmed after an uncertain outcome). Never deleted by cleanup.
+   */
+  sentEmails: defineTable({
+    queueItemId: v.id('sendQueue'),
+    companyId: v.string(),
+    companyName: v.string(),
+    companyDomain: v.string(),
+    intendedTo: v.string(),
+    actualTo: v.string(),
+    redirected: v.boolean(),
+    subject: v.string(),
+    text: v.string(),
+    html: v.string(),
+    sentAt: v.string(),
+    providerMessageId: v.optional(v.string()),
+    acceptance: v.union(
+      v.literal('smtp-accepted'),
+      v.literal('manually-confirmed'),
+    ),
+    runId: v.optional(v.id('pipelineRuns')),
+    isTest: v.boolean(),
+  })
+    .index('by_sentAt', ['sentAt'])
+    .index('by_company', ['companyId']),
 });

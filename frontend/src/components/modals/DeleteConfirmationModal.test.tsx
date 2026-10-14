@@ -17,6 +17,8 @@ describe('DeleteConfirmationModal', () => {
     expect(
       screen.getByRole('heading', { name: 'Delete 3 companies?' }),
     ).toBeInTheDocument();
+    expect(screen.getByText(/Sent email history is kept/)).toBeInTheDocument();
+    expect(screen.queryByText(/resume/i)).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
     expect(onConfirm).toHaveBeenCalledTimes(1);
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));

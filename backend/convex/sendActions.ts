@@ -3,167 +3,101 @@
 import { v } from 'convex/values';
 import nodemailer from 'nodemailer';
 import { internal } from './_generated/api';
-import { action, internalAction, type ActionCtx } from './_generated/server';
+import { internalAction } from './_generated/server';
 import type { Id } from './_generated/dataModel';
-import { parsePlainEmailTemplate } from '@emailstrat/common';
-
-interface MailAttachment {
-  filename: string;
-  content: Buffer;
-  contentType: string;
-}
+import { dispatchQueueItem, type MailMessage } from './outreach/dispatch';
 
 function env(name: string): string {
   const value = process.env[name]?.trim();
   if (value === undefined || value.length === 0) {
-    throw new Error(`${name} is not configured in Convex env.`);
+    // ECONFIG marks this as a definite failure: nothing was sent to Gmail.
+    throw Object.assign(
+      new Error(`${name} is not configured in the Convex environment.`),
+      { code: 'ECONFIG' },
+    );
   }
   return value;
 }
 
-function trimError(message: string): string {
-  return message.length > 1000 ? `${message.slice(0, 997)}...` : message;
+function secrets(): (string | undefined)[] {
+  return [
+    process.env.GMAIL_APP_PASSWORD,
+    process.env.OPENAI_API_KEY,
+    process.env.GEMINI_API_KEY,
+    process.env.GEMINI_API_KEY_PAID,
+  ];
 }
 
-async function fileAttachmentFromUrl(
-  url: string,
-  companyName: string,
-): Promise<MailAttachment> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(
-      `Resume attachment fetch failed (${response.status}): ${await response.text()}`,
-    );
-  }
-  return {
-    filename: `${companyName.replace(/[^\w.-]+/g, '_')}_Resume.pdf`,
-    content: Buffer.from(await response.arrayBuffer()),
-    contentType: 'application/pdf',
-  };
-}
-
-async function mailPayload(ctx: ActionCtx, itemId: Id<'sendQueue'>) {
-  const draft = await ctx.runQuery(internal.send.loadQueueItemDraft, {
-    itemId,
-  });
-  if (draft === null) return null;
-
-  const { subjectLine, bodyText } = parsePlainEmailTemplate(
-    draft.emailTemplate,
-  );
-  const resumePdfUrl =
-    draft.resumePdfId !== undefined
-      ? await ctx.storage.getUrl(draft.resumePdfId)
-      : null;
-  const attachment =
-    resumePdfUrl !== null
-      ? await fileAttachmentFromUrl(resumePdfUrl, draft.companyName)
-      : undefined;
-  const redirectTo = process.env.GMAIL_REDIRECT_TO?.trim();
-  const toAddress =
-    redirectTo !== undefined && redirectTo.length > 0
-      ? redirectTo
-      : draft.item.to;
-  const redirected = toAddress !== draft.item.to;
-  const subject =
-    draft.item.subject || subjectLine || `Outreach to ${draft.companyName}`;
-
-  return {
-    draft,
-    to: toAddress,
-    subject: redirected ? `[Draft for ${draft.item.to}] ${subject}` : subject,
-    text: redirected
-      ? `Original recipient: ${draft.item.to}\n\n${bodyText}`
-      : bodyText,
-    ...(attachment !== undefined ? { attachments: [attachment] } : {}),
-  };
-}
-
-async function sendGmailMail(args: {
-  to: string;
-  subject: string;
-  text: string;
-  attachments?: MailAttachment[];
-}) {
+async function sendGmailMail(message: MailMessage) {
   const user = env('GMAIL_USER');
   const pass = env('GMAIL_APP_PASSWORD').replace(/\s/g, '');
-  const from = process.env.GMAIL_FROM?.trim() || user;
+  const fromName = process.env.GMAIL_FROM?.trim();
   const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: { user, pass },
+    connectionTimeout: 20_000,
+    greetingTimeout: 20_000,
+    socketTimeout: 60_000,
   });
-
-  await transporter.sendMail({
-    from,
-    to: args.to,
-    subject: args.subject,
-    text: args.text,
-    ...(args.attachments !== undefined
-      ? { attachments: args.attachments }
-      : {}),
+  const info = await transporter.sendMail({
+    from: fromName ? { name: fromName, address: user } : user,
+    to: message.to,
+    subject: message.subject,
+    text: message.text,
+    html: message.html,
   });
+  return {
+    messageId: info.messageId,
+    accepted: info.accepted,
+    rejected: info.rejected,
+  };
 }
 
 /**
- * Compatibility no-op for queue rows scheduled by older code. Gmail SMTP does
- * not expose visible draft creation without Gmail API OAuth, so scheduling stays
- * in Convex and the mail is sent by `processQueueItem` at the selected time.
- */
-export const createQueueItemDraft = internalAction({
-  args: { itemId: v.id('sendQueue') },
-  handler: async () => undefined,
-});
-
-/** Cancel unsent queue rows. Gmail SMTP has no external draft to delete. */
-export const cancelScheduledSends = action({
-  args: { companyIds: v.array(v.string()) },
-  handler: async (ctx, { companyIds }): Promise<{ canceled: number }> => {
-    const items: {
-      itemId: Id<'sendQueue'>;
-      companyId: string;
-      outlookDraftId?: string;
-    }[] = await ctx.runQuery(internal.send.loadCancelableQueueItems, {
-      companyIds,
-    });
-    if (items.length === 0) return { canceled: 0 };
-
-    await ctx.runMutation(internal.send.removeQueueItems, {
-      itemIds: items.map((item) => item.itemId),
-    });
-    return { canceled: items.length };
-  },
-});
-
-/**
- * Scheduled queue processor. Convex owns the schedule; Gmail SMTP performs the
- * send when the scheduled function fires.
+ * Scheduled dispatcher for one queue row. Convex owns the schedule; the row
+ * is claimed atomically before Gmail is contacted, so it is sent at most once.
  */
 export const processQueueItem = internalAction({
   args: { itemId: v.id('sendQueue') },
   handler: async (ctx, { itemId }) => {
-    const payload = await mailPayload(ctx, itemId);
+    const outcome = await dispatchQueueItem({
+      redirectTo: process.env.GMAIL_REDIRECT_TO,
+      secrets: secrets(),
+      claim: (actualTo) =>
+        ctx.runMutation(internal.send.claimQueueItem, {
+          itemId,
+          ...(actualTo !== undefined ? { actualTo } : {}),
+        }),
+      sendMail: sendGmailMail,
+      markSent: (providerMessageId) =>
+        ctx.runMutation(internal.send.markQueueItemSent, {
+          itemId,
+          ...(providerMessageId !== undefined ? { providerMessageId } : {}),
+        }),
+      markFailed: (error) =>
+        ctx.runMutation(internal.send.markQueueItemFailed, { itemId, error }),
+      markUncertain: (error) =>
+        ctx.runMutation(internal.send.markQueueItemUncertain, {
+          itemId,
+          error,
+        }),
+    });
+    console.log(`Queue item ${itemId}: ${outcome}`);
+  },
+});
 
-    if (payload === null || payload.draft.item.status === 'sent') return;
-    if (payload.draft.item.status === 'failed') return;
-
-    try {
-      await sendGmailMail({
-        to: payload.to,
-        subject: payload.subject,
-        text: payload.text,
-        ...(payload.attachments !== undefined
-          ? { attachments: payload.attachments }
-          : {}),
-      });
-      await ctx.runMutation(internal.send.markQueueItemSent, { itemId });
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Unknown Gmail send error';
-      await ctx.runMutation(internal.send.markQueueItemFailed, {
-        itemId,
-        error: trimError(message),
-      });
-      throw error;
-    }
+/**
+ * Smoke test: queue the company's current draft, clearly labeled, to the
+ * configured GMAIL_USER inbox only. Run from the CLI:
+ * `bunx convex run sendActions:sendSelfTest '{"companyId":"..."}'`
+ */
+export const sendSelfTest = internalAction({
+  args: { companyId: v.string() },
+  handler: async (ctx, { companyId }): Promise<{ itemId: Id<'sendQueue'> }> => {
+    const itemId = await ctx.runMutation(internal.send.enqueueSelfTest, {
+      companyId,
+      to: env('GMAIL_USER'),
+    });
+    return { itemId };
   },
 });

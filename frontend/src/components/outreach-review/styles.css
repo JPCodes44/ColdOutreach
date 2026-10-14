@@ -1,0 +1,423 @@
+/* Outreach Review screen: evidence, proposed solution, editor, and preview. */
+
+.reviewScreen {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  font:
+    400 13px/18px Inter,
+    system-ui,
+    -apple-system,
+    sans-serif;
+  color: #191c1e;
+}
+
+.reviewEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 64px 24px;
+  text-align: center;
+  color: #434655;
+}
+
+.reviewHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.reviewHeaderText {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.reviewHeaderActions,
+.reviewEditorActions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.reviewTitle {
+  margin: 0;
+  font:
+    600 24px/32px Inter,
+    system-ui,
+    -apple-system,
+    sans-serif;
+  letter-spacing: -0.01em;
+}
+
+.reviewMuted {
+  margin: 0;
+  color: #737686;
+}
+
+.reviewLoading {
+  padding: 24px 0;
+}
+
+.reviewMono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.reviewPrimaryButton,
+.reviewSecondaryButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 4px;
+  font:
+    500 12px/16px Inter,
+    system-ui,
+    -apple-system,
+    sans-serif;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.reviewPrimaryButton {
+  border: none;
+  background: #004ac6;
+  color: #ffffff;
+}
+
+.reviewPrimaryButton:hover:not(:disabled) {
+  background: #003da3;
+}
+
+.reviewSecondaryButton {
+  border: 1px solid #c3c6d7;
+  background: #ffffff;
+  color: #191c1e;
+}
+
+.reviewSecondaryButton:hover:not(:disabled) {
+  background: #eceef0;
+}
+
+.reviewPrimaryButton:disabled,
+.reviewSecondaryButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.reviewLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.reviewColumn,
+.reviewWorkspace {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+@media (max-width: 1100px) {
+  .reviewLayout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.reviewCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid #c3c6d7;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.reviewCardTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font:
+    600 15px/20px Inter,
+    system-ui,
+    -apple-system,
+    sans-serif;
+}
+
+.reviewSubTitle {
+  margin: 6px 0 0;
+  font:
+    600 12px/16px Inter,
+    system-ui,
+    -apple-system,
+    sans-serif;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #434655;
+}
+
+.reviewList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.reviewDetails summary {
+  cursor: pointer;
+  color: #004ac6;
+}
+
+.reviewTag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.reviewTag-observed {
+  background: #d7f5e3;
+  color: #0b6b3a;
+}
+
+.reviewTag-hypothesis {
+  background: #fff1d6;
+  color: #8a5300;
+  border: 1px dashed #c98a1a;
+}
+
+.reviewTag-proposal {
+  background: #e3ebff;
+  color: #003da3;
+}
+
+.reviewOpportunities {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.reviewOpportunity p {
+  margin: 0 0 4px;
+}
+
+.reviewOpportunityTitle {
+  margin: 0;
+  font-weight: 600;
+}
+
+.reviewSteps {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reviewStep {
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid #c3c6d7;
+  color: #737686;
+}
+
+.reviewStep-done {
+  background: #d7f5e3;
+  border-color: #9fd9b8;
+  color: #0b6b3a;
+}
+
+.reviewStep-active {
+  background: #004ac6;
+  border-color: #004ac6;
+  color: #ffffff;
+}
+
+.reviewError {
+  border-color: #ffb4ab;
+  background: #fff4f2;
+}
+
+.reviewError p {
+  margin: 0;
+}
+
+.reviewDashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 2px dashed #9fb3c8;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.reviewDashboardLabel {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #b44d12;
+}
+
+.reviewStages {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reviewStage {
+  padding: 4px 8px;
+  border: 1px solid #bcccdc;
+  background: #e6f0fa;
+  color: #334e68;
+  font-size: 12px;
+}
+
+.reviewMetrics {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.reviewMetric {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 12px;
+  padding: 6px 0;
+  border-top: 1px solid #d9e2ec;
+}
+
+.reviewMetric dt {
+  font-weight: 600;
+}
+
+.reviewMetric dd {
+  grid-column: 1;
+  margin: 0;
+  color: #616e7c;
+  font-size: 12px;
+}
+
+.reviewMetric .reviewMetricValue {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  color: #9aa5b1;
+}
+
+.reviewField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-weight: 500;
+  color: #434655;
+}
+
+.reviewField input,
+.reviewField textarea {
+  padding: 8px 10px;
+  border: 1px solid #c3c6d7;
+  border-radius: 4px;
+  font: inherit;
+  color: #191c1e;
+  resize: vertical;
+}
+
+.reviewField input:focus,
+.reviewField textarea:focus {
+  outline: 2px solid #b4c5ff;
+  border-color: #004ac6;
+}
+
+.reviewDirty {
+  font-weight: 400;
+  font-size: 12px;
+  color: #8a5300;
+}
+
+.reviewBanner {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 6px;
+}
+
+.reviewBanner-approved {
+  background: #d7f5e3;
+  color: #0b6b3a;
+}
+
+.reviewBanner-warning {
+  background: #fff1d6;
+  color: #7a4a00;
+}
+
+.reviewBanner-error {
+  background: #fff4f2;
+  color: #ba1a1a;
+}
+
+.reviewTabs {
+  display: flex;
+  gap: 4px;
+}
+
+.reviewTab {
+  padding: 6px 12px;
+  border: 1px solid #c3c6d7;
+  border-radius: 4px;
+  background: #ffffff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.reviewTabActive {
+  background: #004ac6;
+  border-color: #004ac6;
+  color: #ffffff;
+}
+
+.reviewPreviewSubject {
+  margin: 0;
+}
+
+.reviewPreviewFrame {
+  width: 100%;
+  height: 640px;
+  border: 1px solid #d9e2ec;
+  border-radius: 4px;
+  background: #ffffff;
+}
+
+.reviewPreviewText {
+  margin: 0;
+  max-height: 640px;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid #d9e2ec;
+  border-radius: 4px;
+  background: #f7f9fb;
+  white-space: pre-wrap;
+  font-size: 12px;
+  line-height: 1.5;
+}

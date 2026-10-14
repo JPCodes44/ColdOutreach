@@ -1,59 +1,83 @@
-/** Whether a company's outreach artifacts have been generated yet. */
-export type DraftStatus = 'drafted' | 'not-drafted';
+/** Draft lifecycle for a company, as reported by `outreachRuns:listPipelineCompanies`. */
+export type DraftState =
+  | 'none'
+  | 'running'
+  | 'ready'
+  | 'approved'
+  | 'failed'
+  | 'legacy';
 
-export interface CampaignCompany {
+/** Pipeline stage while a run is in progress. */
+export type RunStage =
+  | 'queued'
+  | 'retrieving'
+  | 'analyzing'
+  | 'composing'
+  | 'rendering'
+  | 'done';
+
+/** One row from `outreachRuns:listPipelineCompanies`. */
+export interface PipelineCompanyRow {
   id: string;
   name: string;
+  domain: string;
   industry: string;
-  score: number;
-  status: DraftStatus;
-  /** Generated email subject line; empty/absent until drafted. */
-  subject?: string;
-  selected?: boolean;
+  confidence: number;
+  draftState: DraftState;
+  stage: RunStage | null;
+  lastError: string | null;
+  subject: string;
+  recipientCount: number;
+  sendStatus: string;
 }
 
-/** Per-row actions to open the generated email template / résumé. */
-export interface ArtifactActions {
-  onShowTemplate: (id: string) => void;
-  onShowResume: (id: string) => void;
+/** A pipeline row plus its UI selection state. */
+export interface CampaignCompany extends PipelineCompanyRow {
+  selected: boolean;
 }
+
+/** Status-filter chip values. */
+export type PipelineFilter =
+  | 'all'
+  | 'needs-run'
+  | 'ready'
+  | 'approved'
+  | 'failed';
 
 export interface CampaignHeaderProps {
   query: string;
   onQueryChange: (value: string) => void;
-  statusFilter: DraftStatus | 'all';
-  onStatusFilterChange: (value: DraftStatus | 'all') => void;
+  statusFilter: PipelineFilter;
+  onStatusFilterChange: (value: PipelineFilter) => void;
+  selectedCount: number;
+  running: boolean;
+  onRun: () => void;
+  onDelete: () => void;
 }
 
 export interface CampaignScoreProps {
   score: number;
 }
 
-export interface CampaignRowProps extends ArtifactActions {
+export interface DraftStatusCellProps {
+  company: PipelineCompanyRow;
+}
+
+export interface CampaignRowProps {
   company: CampaignCompany;
-  active: boolean;
-  /** True while this company's templates/resumes are being generated. */
-  generating: boolean;
-  onSelect: (id: string) => void;
+  onOpenReview: (id: string) => void;
   onToggleSelected: (id: string) => void;
 }
 
-export interface CampaignTableProps extends ArtifactActions {
+export interface CampaignTableProps {
   companies: CampaignCompany[];
-  activeId: string;
-  /** Ids whose artifacts are currently generating (drives the row loading state). */
-  generatingIds: ReadonlySet<string>;
-  onSelect: (id: string) => void;
+  loading: boolean;
+  onOpenReview: (id: string) => void;
   onToggleSelected: (id: string) => void;
   onToggleAll: () => void;
 }
 
-export interface EntityDrawerProps {
-  company: CampaignCompany;
-  onClose: () => void;
-}
-
 export interface CampaignsScreenProps {
-  /** Navigate to the Draft Review workspace (from the generation-success modal). */
-  onViewDraftReview?: () => void;
+  /** Open the Outreach Review screen for one company. */
+  onOpenReview?: (companyId: string) => void;
 }

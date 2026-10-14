@@ -191,3 +191,16 @@
   background: #fff1f0;
   color: #912018;
 }
+
+.emailTableError {
+  margin: 0 24px;
+  padding: 10px 16px;
+  border-radius: 4px;
+  background: #ffdad6;
+  color: #93000a;
+  font:
+    500 14px/20px Inter,
+    system-ui,
+    -apple-system,
+    sans-serif;
+}

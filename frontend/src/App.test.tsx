@@ -1,60 +1,49 @@
-import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from './App';
 
+// Keep the third-party spreadsheet out of navigation tests (slow under jsdom).
+vi.mock('@handsontable/react-wrapper', () => ({
+  HotTable: ({ id }: { id: string }) => <div id={id} />,
+  HotColumn: () => null,
+}));
+vi.mock('handsontable/registry', () => ({
+  registerAllModules: () => undefined,
+}));
+
+async function go(label: RegExp, heading: string, level = 1) {
+  const nav = screen.getByRole('navigation', { name: 'Primary' });
+  await userEvent.click(within(nav).getByRole('button', { name: label }));
+  expect(
+    screen.getByRole('heading', { name: heading, level }),
+  ).toBeInTheDocument();
+}
+
 describe('App navigation', () => {
-  it('switches between Generation Jobs and Companies from the sidebar', async () => {
+  it('moves through the outreach workflow from the sidebar', async () => {
     render(<App />);
-    // Companies is the default screen on load.
     expect(
       screen.getByRole('heading', { name: 'Generate Target List' }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: 'Notifications' }),
-    ).toBeInTheDocument();
+    expect(screen.getByLabelText('API credit balances')).toBeInTheDocument();
 
-    await userEvent.click(
-      screen.getByRole('button', { name: /Generation Jobs/ }),
-    );
+    await go(/Pipeline/, 'Outreach Pipeline');
+    await go(/Review/, 'Outreach Review');
+    await go(/Recipients/, 'Recipients');
+    await go(/^Send$/, 'Choose Companies to Send');
+    // Nothing is selectable without live data, so Continue stays disabled.
     expect(
-      screen.getByRole('heading', { name: 'Generation Jobs' }),
-    ).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('button', { name: /Companies/ }));
-    expect(
-      screen.getByRole('heading', { name: 'Generate Target List' }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: 'Notifications' }),
-    ).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('button', { name: /Campaigns/ }));
-    expect(
-      screen.getByRole('heading', { name: 'Target Companies' }),
-    ).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('button', { name: /Email Table/ }));
-    expect(
-      screen.getByRole('heading', { name: 'Email Table' }),
-    ).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('button', { name: /Draft Review/ }));
-    expect(
-      screen.getByRole('heading', { name: 'Review Company Email Groups' }),
-    ).toBeInTheDocument();
-
-    // Continue to Send stays disabled until a company is selected (no live data
-    // under the test client, so nothing is selectable here).
-    expect(
-      screen.getByRole('button', { name: /Continue to Send/ }),
+      screen.getByRole('button', { name: /Continue to Schedule/ }),
     ).toBeDisabled();
+    await go(/Schedule/, 'Schedule Submission');
+    await go(/History/, 'Send History');
+    await go(/Settings/, 'Settings');
+    await go(/Companies/, 'Generate Target List', 2);
 
-    await userEvent.click(
-      screen.getByRole('button', { name: /Generation Jobs/ }),
-    );
     expect(
-      screen.getByRole('heading', { name: 'Generation Jobs' }),
-    ).toBeInTheDocument();
+      screen.queryByRole('button', { name: /Generation Jobs/ }),
+    ).toBeNull();
+    expect(document.body.textContent).not.toMatch(/r[ée]sum[ée]/i);
   }, 20000);
 });

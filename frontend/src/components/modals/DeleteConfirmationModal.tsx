@@ -5,7 +5,7 @@ import { ModalActions } from './ModalActions';
 import { ModalButton } from './ModalButton';
 import type { DeleteConfirmationModalProps } from './types';
 
-/** Destructive confirmation before removing companies (and their artifacts). */
+/** Destructive confirmation before removing companies and their drafts. */
 export function DeleteConfirmationModal({
   count,
   onCancel,
@@ -21,8 +21,8 @@ export function DeleteConfirmationModal({
             Delete {count} {noun}?
           </h2>
           <p className="modalBody">
-            This removes the selected {noun} and any generated email templates &
-            resumes. This can&apos;t be undone.
+            This removes the selected {noun}, their generated drafts, and run
+            history. Sent email history is kept. This can&apos;t be undone.
           </p>
           <ModalActions layout="row">
             <ModalButton
