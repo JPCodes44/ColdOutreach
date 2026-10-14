@@ -204,7 +204,7 @@ For formatting the bullet points:
 	- for every experience section, make sure one bullet point is quantifiable by some percentage that makes sense (go a bit above and beyond for display purposes).
 	- each bullet point should be 3 lines (between 228 characters and 280).
 	- here is a great example:
-	- ​    \item Prospected 120 mid-market travel and ecommerce accounts during a merchant acquisition push; applied weekly coaching feedback to build a structured outbound call and video cadence in Salesforce, and converted 18\% of cold leads into qualified pipeline.
+	-     \item Prospected 120 mid-market travel and ecommerce accounts during a merchant acquisition push; applied weekly coaching feedback to build a structured outbound call and video cadence in Salesforce, and converted 18\% of cold leads into qualified pipeline.
 	- no semi colons, no random indents and newlines. 
 
 Extra notes:

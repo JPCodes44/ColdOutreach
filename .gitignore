@@ -10,6 +10,13 @@ build/
 **/_generated/
 .convex/
 
+# Private keys, credential exports, and database exports
+*.pem
+*.key
+credentials*.json
+service-account*.json
+convex-export*.zip
+
 # Environment files
 .env
 .env.*

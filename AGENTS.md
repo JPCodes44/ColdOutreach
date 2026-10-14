@@ -2,25 +2,27 @@
 
 ## Project Structure & Module Organization
 
-This repository is minimal. `README.md` describes the project as an agentic workflow for job-search support, and no source, test, or asset directories exist yet. Keep new files organized by responsibility as the project grows:
-
-- `src/` for application or agent workflow code.
-- `tests/` for automated tests that mirror `src/` modules.
-- `docs/` for design notes, prompts, workflow diagrams, or user-facing documentation.
-- `assets/` for static files such as screenshots, templates, or sample inputs.
-
-Prefer small, focused modules over large catch-all files. If adding integrations, isolate provider-specific code under clear names such as `src/providers/`.
+This Bun workspace contains `common/` (shared TypeScript utilities), `backend/`
+(Convex schema, functions, and generated bindings), and `frontend/` (React/Vite).
+The Convex project is `jp-mak/coldoutreach`; never deploy changes to EmailStrat.
+Keep credentials in Convex's server environment. Local `.env.local` files and
+`backend/convex/_generated/` must remain untracked. Only the public deployment
+URL belongs in frontend environment variables.
 
 ## Build, Test, and Development Commands
 
-No build system or package manager files are present yet. When adding tooling, document the exact commands in `README.md` and keep this guide aligned. Expected future examples:
+- `bun install --frozen-lockfile`: install dependencies.
+- `bun run setup:backend`: build common and deploy/generate Convex bindings.
+- `bun run app`: build common, then start backend and frontend.
+- `bun run test`: shared and frontend tests.
+- `bun run typecheck`: shared and frontend type checks.
+- `bun run --cwd backend typecheck`: backend type check after code generation.
+- `bun run build`: shared and frontend production build.
+- `bun run lint`: repository lint.
 
-- `npm install` or `uv sync`: install project dependencies.
-- `npm test` or `pytest`: run the automated test suite.
-- `npm run lint` or `ruff check .`: run static checks.
-- `npm run dev`: start a local development process.
-
-Do not add dependencies without also adding the lockfile and a short note explaining the runtime requirements.
+Run Convex CLI commands from `backend/`. Do not add dependencies without also
+updating the lockfile and documenting their purpose. Before pushing, scan both
+full Git history and staged files for secrets, and inspect the browser bundle.
 
 ## Coding Style & Naming Conventions
 

@@ -1,5 +1,5 @@
 {
-  "name": "emailstrat",
+  "name": "coldoutreach",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,10 +10,11 @@
     "frontend"
   ],
   "scripts": {
-    "app": "(cd backend && bunx convex dev) & bun run dev:web",
-    "dev": "bun --filter '@emailstrat/frontend' --filter '@emailstrat/backend' --parallel dev",
+    "app": "bun run dev",
+    "dev": "bun run --cwd common build && bun --filter '@emailstrat/frontend' --filter '@emailstrat/backend' --parallel dev",
     "dev:web": "bun run --cwd frontend dev",
-    "dev:backend": "bun run --cwd backend dev",
+    "dev:backend": "bun run --cwd common build && bun run --cwd backend dev",
+    "setup:backend": "bun run --cwd common build && cd backend && bunx convex dev --once",
     "build": "bun run --cwd common build && bun run --cwd frontend build",
     "test": "bun run --cwd common test && bun run --cwd frontend test",
     "typecheck": "bun run --cwd common typecheck && bun run --cwd frontend typecheck",

@@ -1,6 +1,7 @@
-# EmailStrat
+# ColdOutreach
 
-A custom email template generator — a full-stack TypeScript monorepo.
+A cold outreach workspace for prospect research, personalized email generation,
+and scheduled outreach, built with TypeScript, React, and Convex.
 
 Build email templates from typed blocks (text, image, button, divider), validate
 them, and render them to HTML. The repo is split into three workspaces:
@@ -31,59 +32,82 @@ bun run app            # start the web app
 bun run dev:backend    # start Convex (see note below)
 ```
 
-### Backend first run
+### Isolated ColdOutreach backend
 
-The backend uses Convex. Its generated client code (`backend/convex/_generated/`)
-and cloud deployment do **not** exist until you provision them once:
+ColdOutreach uses its own Convex project, separate from EmailStrat:
 
-```bash
-bunx convex dev
-```
+- Project: `jp-mak/coldoutreach`
+- Development deployment: `tremendous-beagle-451` (Canada Central)
+- Dashboard: https://dashboard.convex.dev/t/jp-mak/coldoutreach
 
-This prompts an interactive login, creates a deployment, and generates
-`_generated/`. After that, `bun run dev:backend` typechecks and runs against your
-deployment. Because `_generated/` is absent until then, the backend is excluded
-from the aggregate `build`/`test`/`typecheck` scripts below.
+All tables, generated files in Convex storage, usage records, and scheduled
+functions use this deployment. No original database records or scheduled sends
+are imported. The URL and deployment name are public identifiers, not secrets.
+The workspace package names remain `@emailstrat/*` for import compatibility.
 
-### Company research env
-
-The company research action calls Gemini with Google Search grounding from
-Convex. Set the Gemini key on the Convex deployment, not in frontend env:
+For an authorized collaborator using this deployment:
 
 ```bash
-cd backend
-bunx convex env set GEMINI_API_KEY "..."
-bunx convex env set GEMINI_RESEARCH_MODEL "gemini-2.5-flash" # optional override
+cp backend/.env.example backend/.env.local
+cp frontend/.env.example frontend/.env.local
+bun run setup:backend
+bun run app
 ```
 
-The Vite app also needs the Convex deployment URL in `frontend/.env.local`:
+`setup:backend` builds the shared package before generating and deploying the
+Convex functions. Run Convex commands from `backend/`, never the repository root.
+The local `.env.local` files and generated Convex code are excluded from Git.
+For your own separate deployment, build `common/`, then run
+`bunx convex dev --configure new --dev-deployment cloud --once` from `backend/`
+and set `frontend/.env.local` to the resulting `CONVEX_URL`.
+
+### Server-side integration settings
+
+Set these in the **ColdOutreach** Convex dashboard's environment settings:
+
+| Variable                | Purpose                                            |
+| ----------------------- | -------------------------------------------------- |
+| `GEMINI_API_KEY`        | Company research and subject generation            |
+| `GEMINI_API_KEY_PAID`   | Optional paid Gemini fallback                      |
+| `OPENAI_API_KEY`        | Email/resume generation and subject fallback       |
+| `GMAIL_USER`            | Gmail sending account                              |
+| `GMAIL_APP_PASSWORD`    | Gmail app password (requires 2-Step Verification)  |
+| `GMAIL_FROM`            | Optional allowed sender display name               |
+| `GMAIL_REDIRECT_TO`     | Optional test inbox for redirecting scheduled mail |
+| `GEMINI_RESEARCH_MODEL` | Optional research model override                   |
+| `GEMINI_SUBJECT_MODEL`  | Optional subject model override                    |
+
+Never put provider keys, Gmail passwords, or Convex deploy keys in `VITE_*`
+variables: Vite embeds those variables in the browser bundle. The frontend needs
+only `VITE_CONVEX_URL`. Use the dashboard or the CLI's interactive
+`bunx convex env set NAME` prompt, rather than putting secrets in shell commands.
+Do not copy credentials automatically from another project.
+
+No emails are sent merely by provisioning the backend. Use `GMAIL_REDIRECT_TO`
+for send testing before scheduling real outreach.
+
+### Security boundaries and checks
+
+This inherited app currently has no user authentication or per-user authorization
+on its public Convex functions. Treat it as a single-user development tool;
+add authentication and authorization before deploying it for business users or
+storing sensitive customer information. Keeping API keys server-side does not
+prevent anonymous callers from invoking public functions.
+
+Before pushing, scan the complete Git history with Gitleaks and scan an export
+of the staged files separately:
 
 ```bash
-VITE_CONVEX_URL=https://your-deployment.convex.cloud
+gitleaks git --redact --log-opts="--all" .
+staged_dir=$(mktemp -d)
+git checkout-index --all --prefix="$staged_dir/"
+gitleaks dir --redact "$staged_dir"
 ```
 
-### Gmail sending env
-
-Scheduled outreach is sent through Gmail SMTP from a configured Gmail account.
-Enable 2-Step Verification on the Gmail account, create an App Password, then
-set:
-
-```bash
-cd backend
-bunx convex env set GMAIL_USER "your-address@gmail.com"
-bunx convex env set GMAIL_APP_PASSWORD "your-16-character-app-password"
-```
-
-For safe testing, redirect every scheduled email to one inbox instead of the
-company recipients:
-
-```bash
-bunx convex env set GMAIL_REDIRECT_TO "you@example.com"
-```
-
-Unset `GMAIL_REDIRECT_TO` when you are ready to send to the queued recipient
-addresses. Optionally set `GMAIL_FROM` if you want a custom display sender that
-Gmail allows for the account.
+Also scan `frontend/dist` after building and check that local environment files
+remain ignored. Secret scanners detect known patterns; a clean scan is not a
+proof that every possible secret or security issue is absent. If a real secret
+is found in history, revoke it before considering history cleanup.
 
 ## Quality checks
 
