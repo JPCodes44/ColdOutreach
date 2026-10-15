@@ -408,6 +408,7 @@ async function recordSent(
   const company = await companyByExternalId(ctx, item.companyId);
   const companyDomain = item.companyDomain ?? company?.domain ?? item.companyId;
   const actualTo = item.actualTo ?? item.to;
+  const redirected = isRedirected(item);
   await ctx.db.insert('sentEmails', {
     queueItemId: item._id,
     companyId: item.companyId,
@@ -415,8 +416,7 @@ async function recordSent(
     companyDomain,
     intendedTo: item.to,
     actualTo,
-    redirected:
-      normalizeEmailAddress(actualTo) !== normalizeEmailAddress(item.to),
+    redirected,
     subject: item.snapshot?.subject ?? item.subject,
     text: item.snapshot?.text ?? '',
     html: item.snapshot?.html ?? '',
@@ -426,7 +426,12 @@ async function recordSent(
     ...(providerMessageId !== undefined ? { providerMessageId } : {}),
     ...(item.runId !== undefined ? { runId: item.runId } : {}),
   });
-  if (item.isTest === true) return;
+  // Self-tests and GMAIL_REDIRECT_TO rehearsals never reached the prospect,
+  // so they must not mark the company or recipient as contacted.
+  if (item.isTest === true || redirected) {
+    await refreshCompanyStatus(ctx, item.companyId);
+    return;
+  }
   await recordContactedCompany(
     ctx,
     item.companyId,
@@ -626,6 +631,14 @@ export const getSentEmail = query({
 
 /* ------------------------------------------------- status and ledgers */
 
+/** Sent to a different address than intended (GMAIL_REDIRECT_TO rehearsal). */
+function isRedirected(row: Doc<'sendQueue'>): boolean {
+  return (
+    row.actualTo !== undefined &&
+    normalizeEmailAddress(row.actualTo) !== normalizeEmailAddress(row.to)
+  );
+}
+
 /** Recompute a company's denormalized send status from its queue rows. */
 export async function refreshCompanyStatus(
   ctx: MutationCtx,
@@ -752,7 +765,10 @@ export const purgeSettledCompanies = mutation({
     let removed = 0;
     for (const companyId of new Set(companyIds)) {
       const rows = await queueRowsForCompany(ctx, companyId);
-      const real = rows.filter((row) => row.isTest !== true);
+      // Rehearsals (tests, redirected sends) never settle a company.
+      const real = rows.filter(
+        (row) => row.isTest !== true && !isRedirected(row),
+      );
       const settled =
         real.some((row) => row.status === 'sent') &&
         rows.every(

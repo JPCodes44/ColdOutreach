@@ -48,3 +48,10 @@
 .apiBalancePill-low .apiBalanceValue {
   color: #93000a;
 }
+
+@media (max-width: 767px) {
+  .apiBalances {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+}

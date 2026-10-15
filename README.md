@@ -85,6 +85,8 @@ The workspace package names remain `@emailstrat/*` for import compatibility.
   message ID even after the company, draft, or queue rows are removed.
 - `GMAIL_REDIRECT_TO` redirects every send to a test inbox, labels it with the
   intended recipient, and records intended and actual recipients separately.
+  Redirected sends are rehearsals: they are not added to the contact ledgers
+  and do not remove the company from the pipeline.
 
 ### Website review safeguards
 

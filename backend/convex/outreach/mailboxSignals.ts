@@ -31,6 +31,16 @@ const MESSAGE_ID = /<[^<>\s@]+@[^<>\s]+>/g;
 /** How long after a send a recipient-only bounce match is trusted. */
 const BOUNCE_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
 
+/**
+ * Date for the IMAP SEARCH SINCE filter. SINCE compares calendar dates only,
+ * in the server's timezone, so start two days before the earliest send to
+ * avoid skipping messages near midnight; matching is by Message-ID anyway.
+ */
+export function imapSinceDate(sentAts: string[]): Date {
+  const earliest = Math.min(...sentAts.map((at) => Date.parse(at)));
+  return new Date(earliest - 2 * 24 * 60 * 60 * 1000);
+}
+
 /** Parse a raw header block into lower-cased names (folded lines joined). */
 export function parseHeaders(raw: string): Map<string, string[]> {
   const headers = new Map<string, string[]>();

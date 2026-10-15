@@ -468,6 +468,34 @@ describe('dispatch outcomes', () => {
     return (await queueRows(t))[0]!._id;
   }
 
+  it('keeps redirected rehearsal sends out of the contact ledgers', async () => {
+    const t = await setup();
+    const itemId = await queuedItem(t);
+    await t.mutation(internal.send.claimQueueItem, {
+      itemId,
+      actualTo: 'me@inbox.test',
+    });
+    await t.mutation(internal.send.markQueueItemSent, {
+      itemId,
+      providerMessageId: '<r1@gmail>',
+    });
+    const [sent] = await t.query(api.send.listSentEmails, {});
+    expect(sent).toMatchObject({
+      intendedTo: 'owner@acme.test',
+      actualTo: 'me@inbox.test',
+      redirected: true,
+      isTest: false,
+    });
+    const ledgers = await t.run(async (ctx) => ({
+      companies: await ctx.db.query('emailedCompanies').collect(),
+      recipients: await ctx.db.query('emailedRecipients').collect(),
+    }));
+    expect(ledgers).toEqual({ companies: [], recipients: [] });
+    await expect(
+      t.mutation(api.send.purgeSettledCompanies, { companyIds: ['acme.test'] }),
+    ).resolves.toEqual({ removed: 0 });
+  });
+
   it('claims each row once so it can never be dispatched twice', async () => {
     const t = await setup();
     const itemId = await queuedItem(t);

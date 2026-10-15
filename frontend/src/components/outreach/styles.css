@@ -728,3 +728,32 @@
     flex-basis: calc(14.28% - 14px);
   }
 }
+
+/* Phones: the sidebar becomes a horizontally scrollable strip above the page. */
+@media (max-width: 767px) {
+  .outreachSidebar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    height: auto;
+    padding: 8px 16px;
+    border-right: 0;
+    border-bottom: 1px solid #c3c6d7;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .outreachSidebarHeader {
+    display: none;
+  }
+
+  .outreachSidebarNav {
+    flex-direction: row;
+  }
+
+  .outreachNavItem {
+    width: auto;
+    white-space: nowrap;
+  }
+}

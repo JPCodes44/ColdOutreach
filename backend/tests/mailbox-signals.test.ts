@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { api, internal } from '../convex/_generated/api';
 import {
+  imapSinceDate,
   matchDeliverySignals,
   parseBounce,
   parseHeaders,
@@ -44,6 +45,17 @@ const GMAIL_BOUNCE: InboxMessage = {
     'Subject: A thought on your contact page',
   ].join('\r\n'),
 };
+
+describe('imapSinceDate', () => {
+  it('starts two days before the earliest send (SINCE is date-only)', () => {
+    expect(
+      imapSinceDate([
+        '2026-10-15T03:37:59.000Z',
+        '2026-10-16T10:00:00.000Z',
+      ]).toISOString(),
+    ).toBe('2026-10-13T03:37:59.000Z');
+  });
+});
 
 describe('parseHeaders', () => {
   it('joins folded lines and lower-cases names', () => {

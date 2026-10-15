@@ -1,5 +1,9 @@
 import { v } from 'convex/values';
 import { internalMutation, internalQuery } from './_generated/server';
+import {
+  normalizeCompanyDomain,
+  normalizeEmailAddress,
+} from '@emailstrat/common';
 import { refreshCompanyStatus } from './send';
 
 /**
@@ -93,5 +97,59 @@ export const convertUnseededBalances = internalMutation({
       converted += 1;
     }
     return { converted };
+  },
+});
+
+/**
+ * Before redirected rehearsals were excluded, a GMAIL_REDIRECT_TO send was
+ * recorded in the contact ledgers as if the prospect had been emailed. Remove
+ * ledger entries that came only from such a send (idempotent):
+ * `bunx convex run migrations:removeRehearsalLedgerEntries`.
+ */
+export const removeRehearsalLedgerEntries = internalMutation({
+  args: {},
+  returns: v.object({ companies: v.number(), recipients: v.number() }),
+  handler: async (ctx) => {
+    let companies = 0;
+    let recipients = 0;
+    const rehearsals = (await ctx.db.query('sentEmails').collect()).filter(
+      (row) => row.redirected && !row.isTest,
+    );
+    for (const row of rehearsals) {
+      const email = normalizeEmailAddress(row.intendedTo);
+      const recipient =
+        email === null
+          ? null
+          : await ctx.db
+              .query('emailedRecipients')
+              .withIndex('by_normalizedEmail', (q) =>
+                q.eq('normalizedEmail', email),
+              )
+              .unique();
+      if (
+        recipient !== null &&
+        recipient.contactCount === 1 &&
+        recipient.firstContactedAt === row.sentAt
+      ) {
+        await ctx.db.delete(recipient._id);
+        recipients += 1;
+      }
+      const domain = normalizeCompanyDomain(row.companyDomain);
+      const company = await ctx.db
+        .query('emailedCompanies')
+        .withIndex('by_normalizedDomain', (q) =>
+          q.eq('normalizedDomain', domain),
+        )
+        .unique();
+      if (
+        company !== null &&
+        company.sentCount === 1 &&
+        company.firstSentAt === row.sentAt
+      ) {
+        await ctx.db.delete(company._id);
+        companies += 1;
+      }
+    }
+    return { companies, recipients };
   },
 });

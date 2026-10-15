@@ -62,3 +62,73 @@ describe('provider balance tracking', () => {
     });
   });
 });
+
+describe('removeRehearsalLedgerEntries', () => {
+  it('drops ledger rows created only by a redirected send, once', async () => {
+    const t = await signedInOperator();
+    const sentAt = '2026-10-15T03:37:59.533Z';
+    await t.run(async (ctx) => {
+      const queueItemId = await ctx.db.insert('sendQueue', {
+        batchId: 'b',
+        companyId: 'pete.test',
+        company: 'Pete',
+        to: 'verification@example.com',
+        subject: 's',
+        status: 'sent',
+        scheduledAt: sentAt,
+        createdAt: sentAt,
+      });
+      await ctx.db.insert('sentEmails', {
+        queueItemId,
+        companyId: 'pete.test',
+        companyName: 'Pete',
+        companyDomain: 'pete.test',
+        intendedTo: 'verification@example.com',
+        actualTo: 'me@inbox.test',
+        redirected: true,
+        subject: 's',
+        text: 't',
+        html: 'h',
+        sentAt,
+        acceptance: 'smtp-accepted',
+        isTest: false,
+      });
+      await ctx.db.insert('emailedCompanies', {
+        normalizedDomain: 'pete.test',
+        domain: 'pete.test',
+        name: 'Pete',
+        firstSentAt: sentAt,
+        lastSentAt: sentAt,
+        sentCount: 1,
+      });
+      await ctx.db.insert('emailedRecipients', {
+        normalizedEmail: 'verification@example.com',
+        email: 'verification@example.com',
+        companyDomain: 'pete.test',
+        companyName: 'Pete',
+        firstContactedAt: sentAt,
+        lastContactedAt: sentAt,
+        contactCount: 1,
+      });
+      // A real contact elsewhere stays untouched.
+      await ctx.db.insert('emailedCompanies', {
+        normalizedDomain: 'real.test',
+        domain: 'real.test',
+        name: 'Real',
+        firstSentAt: sentAt,
+        lastSentAt: sentAt,
+        sentCount: 1,
+      });
+    });
+    await expect(
+      t.mutation(internal.migrations.removeRehearsalLedgerEntries, {}),
+    ).resolves.toEqual({ companies: 1, recipients: 1 });
+    await expect(
+      t.mutation(internal.migrations.removeRehearsalLedgerEntries, {}),
+    ).resolves.toEqual({ companies: 0, recipients: 0 });
+    const left = await t.run((ctx) =>
+      ctx.db.query('emailedCompanies').collect(),
+    );
+    expect(left.map((row) => row.normalizedDomain)).toEqual(['real.test']);
+  });
+});

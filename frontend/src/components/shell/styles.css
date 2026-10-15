@@ -8,6 +8,19 @@ body,
 
 body {
   overflow: hidden;
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
 }
 
 * {
@@ -66,4 +79,20 @@ body {
 .appPageFlush {
   gap: 0;
   padding: 0;
+}
+
+@media (max-width: 767px) {
+  .appShell {
+    flex-direction: column;
+  }
+
+  .shellTopBar {
+    height: auto;
+    min-height: 56px;
+    padding: 8px 16px;
+  }
+
+  .shellTopSpacer {
+    min-width: 0;
+  }
 }

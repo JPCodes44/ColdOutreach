@@ -5,6 +5,7 @@ import { internal } from './_generated/api';
 import { internalAction } from './_generated/server';
 import type { Id } from './_generated/dataModel';
 import {
+  imapSinceDate,
   isBounceNotice,
   matchDeliverySignals,
   type InboxMessage,
@@ -28,9 +29,7 @@ export const checkMailbox = internalAction({
     if (!user || !pass) return { bounced: 0, replied: 0 };
     const sent = await ctx.runQuery(internal.delivery.watchedSentEmails, {});
     if (sent.length === 0) return { bounced: 0, replied: 0 };
-    const since = new Date(
-      Math.min(...sent.map((row) => Date.parse(row.sentAt))),
-    );
+    const since = imapSinceDate(sent.map((row) => row.sentAt));
 
     const client = new ImapFlow({
       host: 'imap.gmail.com',
@@ -38,6 +37,9 @@ export const checkMailbox = internalAction({
       secure: true,
       auth: { user, pass },
       logger: false,
+      connectionTimeout: 20_000,
+      greetingTimeout: 15_000,
+      socketTimeout: 60_000,
     });
     const messages: InboxMessage[] = [];
     const uidOf = new Map<InboxMessage, number>();

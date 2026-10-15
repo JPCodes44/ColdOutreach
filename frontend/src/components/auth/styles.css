@@ -84,6 +84,8 @@
 }
 
 .authSignOut {
+  flex-shrink: 0;
+  white-space: nowrap;
   border: 1px solid #c3c6d7;
   border-radius: 8px;
   color: #434655;
