@@ -32,6 +32,9 @@ export function sentRow(overrides: Partial<SentEmailRow> = {}): SentEmailRow {
     acceptance: 'smtp-accepted',
     providerMessageId: '<m1>',
     isTest: false,
+    bouncedAt: null,
+    bounceDetail: null,
+    repliedAt: null,
     ...overrides,
   };
 }

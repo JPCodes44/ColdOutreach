@@ -204,3 +204,13 @@
     -apple-system,
     sans-serif;
 }
+
+.emailTableLoading {
+  margin: 24px;
+  font:
+    400 14px/20px Inter,
+    system-ui,
+    -apple-system,
+    sans-serif;
+  color: #434655;
+}

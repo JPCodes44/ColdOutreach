@@ -5,6 +5,7 @@ import {
   query,
   type QueryCtx,
 } from './_generated/server';
+import { requireOperator } from './operator';
 import {
   DEFAULT_SETTINGS,
   SETTINGS_LIMITS,
@@ -54,6 +55,7 @@ export const get = query({
   args: {},
   returns: settingsResult,
   handler: async (ctx) => {
+    await requireOperator(ctx);
     const current = await loadCurrentSettings(ctx);
     const row = await ctx.db
       .query('outreachSettings')
@@ -78,6 +80,7 @@ export const save = mutation({
   },
   returns: v.object({ version: v.number() }),
   handler: async (ctx, args) => {
+    await requireOperator(ctx);
     const normalized = normalizeSettingsInput(args);
     const current = await loadCurrentSettings(ctx);
     const version = current.version + 1;

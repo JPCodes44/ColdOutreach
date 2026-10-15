@@ -1,5 +1,6 @@
 import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
+import { requireOperator } from './operator';
 import {
   nonEmptyStrings,
   renderOutreachEmail,
@@ -33,6 +34,7 @@ function hasRecipient(company: {
 export const listEmailTableRows = query({
   args: {},
   handler: async (ctx) => {
+    await requireOperator(ctx);
     const companies = await ctx.db.query('companies').collect();
     const rows = [];
     for (const company of companies) {
@@ -62,6 +64,7 @@ export const listEmailTableRows = query({
 export const listCompaniesWithEmails = query({
   args: {},
   handler: async (ctx) => {
+    await requireOperator(ctx);
     const companies = await ctx.db.query('companies').collect();
     const rows = [];
     for (const company of companies.filter(hasRecipient)) {
@@ -89,6 +92,7 @@ export const listCompaniesWithEmails = query({
 export const getCompanyEmailDrafts = query({
   args: { companyId: v.string() },
   handler: async (ctx, { companyId }) => {
+    await requireOperator(ctx);
     const company = await ctx.db
       .query('companies')
       .withIndex('by_externalId', (q) => q.eq('externalId', companyId))
@@ -121,6 +125,7 @@ export const setEmailRow = mutation({
     email3: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireOperator(ctx);
     const company = await ctx.db
       .query('companies')
       .withIndex('by_externalId', (q) => q.eq('externalId', args.companyId))

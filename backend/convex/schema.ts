@@ -1,3 +1,4 @@
+import { authTables } from '@convex-dev/auth/server';
 import { defineSchema, defineTable } from 'convex/server';
 import { v } from 'convex/values';
 
@@ -27,7 +28,13 @@ export const settingsSnapshotValidator = v.object({
 
 export const evidenceValidator = v.object({
   sources: v.array(
-    v.object({ url: v.string(), title: v.string(), fetchedAt: v.string() }),
+    v.object({
+      url: v.string(),
+      title: v.string(),
+      fetchedAt: v.string(),
+      /** Rendered by the headless-browser fallback (JavaScript sites). */
+      rendered: v.optional(v.boolean()),
+    }),
   ),
   facts: v.array(
     v.object({
@@ -94,6 +101,7 @@ export const queueStatusValidator = v.union(
 );
 
 export default defineSchema({
+  ...authTables,
   /**
    * Legacy job-application artifacts (cold email + résumé). Retained only so
    * existing documents stay valid; nothing reads, displays, or sends them.
@@ -182,6 +190,8 @@ export default defineSchema({
     content: outreachContentValidator,
     status: v.union(v.literal('ready'), v.literal('approved')),
     approvedAt: v.optional(v.string()),
+    /** Flagged claims the reviewer explicitly accepted when approving. */
+    acknowledgedClaims: v.optional(v.array(v.string())),
     editedAt: v.optional(v.string()),
     createdAt: v.string(),
     updatedAt: v.string(),
@@ -215,7 +225,10 @@ export default defineSchema({
       v.literal('deepseek'),
       v.literal('gemini'),
     ),
+    /** Remaining dollars; unset until a starting balance is known. */
     balanceUsd: v.optional(v.number()),
+    /** Estimated dollars spent since tracking began. */
+    spentUsd: v.optional(v.number()),
     freeRequestsRemaining: v.optional(v.number()),
     freeResetAt: v.optional(v.string()),
     updatedAt: v.string(),
@@ -284,6 +297,11 @@ export default defineSchema({
     ),
     runId: v.optional(v.id('pipelineRuns')),
     isTest: v.boolean(),
+    /** A bounce notice for this message arrived in the Gmail inbox. */
+    bouncedAt: v.optional(v.string()),
+    bounceDetail: v.optional(v.string()),
+    /** A reply referencing this message arrived in the Gmail inbox. */
+    repliedAt: v.optional(v.string()),
   })
     .index('by_sentAt', ['sentAt'])
     .index('by_company', ['companyId']),

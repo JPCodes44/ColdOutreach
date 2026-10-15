@@ -22,7 +22,7 @@ export const saveDraftEditsMutation = makeFunctionReference<
 /** Approve for scheduling. Approving never sends email. */
 export const approveDraftMutation = makeFunctionReference<
   'mutation',
-  { companyId: string },
+  { companyId: string; acknowledgedClaims?: string[] },
   null
 >('outreachRuns:approveDraft');
 

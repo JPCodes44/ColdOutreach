@@ -5,6 +5,8 @@ export interface EvidenceSource {
   url: string;
   title: string;
   fetchedAt: string;
+  /** Rendered in a headless browser because the static HTML was empty. */
+  rendered?: boolean;
 }
 
 export interface EvidenceFact {
@@ -54,6 +56,8 @@ export interface ReviewDraft {
   status: 'ready' | 'approved';
   content: OutreachEmailContent;
   approvedAt: string | null;
+  /** Flagged claims the reviewer confirmed when approving. */
+  acknowledgedClaims: string[];
   editedAt: string | null;
   updatedAt: string;
   settingsVersion: number;
@@ -140,7 +144,8 @@ export interface DraftEditorProps {
   dirty: boolean;
   busy: boolean;
   error: string | null;
-  warnings: string[];
+  /** Flagged claims, hard blockers, and the reviewer's acknowledgements. */
+  review: ClaimReviewProps;
   onSave: () => void;
   onApprove: () => void;
   onUnapprove: () => void;
@@ -148,4 +153,24 @@ export interface DraftEditorProps {
 
 export interface EmailPreviewProps {
   content: OutreachEmailContent;
+}
+
+export interface ClaimReviewProps {
+  /** Unsupported claims; each must be acknowledged before approval. */
+  claims: string[];
+  /** Problems that must be fixed before approval (e.g. missing signature). */
+  blockers: string[];
+  acknowledged: string[];
+  onAcknowledge: (claim: string, checked: boolean) => void;
+}
+
+export interface DraftActionsProps {
+  approved: boolean;
+  dirty: boolean;
+  busy: boolean;
+  /** No blockers and every flagged claim acknowledged. */
+  ready: boolean;
+  onSave: () => void;
+  onApprove: () => void;
+  onUnapprove: () => void;
 }

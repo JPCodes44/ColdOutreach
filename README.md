@@ -25,6 +25,10 @@ The workspace package names remain `@emailstrat/*` for import compatibility.
 
 ## Using the app
 
+0. **Sign in** — the app is restricted to the addresses in the
+   `ALLOWED_EMAILS` Convex environment variable. The first time, choose
+   **Create account** with an allowlisted email and a password of at least 12
+   characters; afterwards, sign in. Anyone else is refused.
 1. **Settings** — save your niche, offer/service description, sender display
    name, signature, and any custom email instructions. Each save creates a new
    version that applies to future pipeline runs only; existing drafts and queued
@@ -40,19 +44,32 @@ The workspace package names remain `@emailstrat/*` for import compatibility.
 4. **Review** — inspect sources (with retrieval times), observed facts vs.
    hypotheses, the proposed workflow, and the dashboard concept. Edit the
    subject, opening, closing, and signature, preview the HTML and plain-text
-   versions, then **Approve**. Any later edit withdraws approval.
+   versions, then **Approve**. Approval is refused while the signature is
+   empty, and every flagged claim (a figure, outcome promise, or back-office
+   claim the website evidence does not support) must either be edited out or
+   individually confirmed; confirmations are stored with the approval. Any
+   later edit withdraws approval.
 5. **Recipients** — enter up to three recipient addresses per company.
 6. **Send** → **Schedule** — choose approved companies, pick a time (or
    immediately) and delivery method. Scheduling stores an immutable snapshot of
    the approved subject, text, and HTML for each recipient.
 7. **History** — follow queued, sending, sent, failed, canceled, and
    uncertain sends; cancel queued sends; resolve uncertain ones; open the exact
-   content of any sent email.
+   content of any sent email. Sent emails show **Bounced** or **Replied** when
+   the Gmail inbox shows it (see below); **Check inbox now** runs that check
+   immediately.
 
 ### Sending semantics
 
 - A message is marked **sent** only after Gmail's SMTP server accepts it. That
   proves acceptance, not inbox delivery or opening.
+- Every 30 minutes (and on **Check inbox now**) the backend reads recent Gmail
+  inbox headers over IMAP with the same app password, matching bounce notices
+  (by the quoted Message-ID, or the failed recipient within three days) and
+  replies (by `In-Reply-To`/`References`) to emails sent in the last 14 days.
+  Only a status, a timestamp, and a short bounce reason are stored (requires
+  IMAP access to the Gmail account, which Gmail enables by default). No bounce
+  does not prove delivery, and opens are not tracked.
 - Each queue row is atomically claimed before Gmail is contacted, so a row is
   dispatched at most once even if its scheduled function runs twice.
 - Definite failures (rejections, authentication or configuration errors,
@@ -75,14 +92,19 @@ The workspace package names remain `@emailstrat/*` for import compatibility.
   resolved and private, loopback, link-local, and reserved addresses are
   rejected, including on every redirect hop. Requests have timeouts, a response
   size cap, a redirect limit, and HTML-only content checks.
-- If the homepage cannot be retrieved (or is an empty JavaScript shell), the run
-  fails with a clear reason; no audit is invented. A failed run never replaces
+- Pages whose static HTML is an empty JavaScript shell are rendered in a
+  headless browser through Firecrawl when `FIRECRAWL_API_KEY` is set (the same
+  public-address checks apply to the URL sent and the URL it ends on; the
+  Review screen marks rendered pages). Without the key, or if rendering still
+  yields nothing, the run fails with a clear reason; no audit is invented. A failed run never replaces
   the last usable draft, and an older run can never overwrite a newer draft.
 - Website text is passed to the model only as delimited, untrusted data.
 - Every observation and opportunity must cite existing evidence IDs. Items that
   do not, and any unhedged figures, loss claims, or claims about invisible
   back-office processes (acknowledgements, follow-up, response speed, CRM), are
-  rejected; the composer gets one retry with feedback before the run fails.
+  rejected. The email is also checked for promised outcomes ("boost bookings",
+  "enhance satisfaction", "guaranteed"), which pass only as genuine questions;
+  the composer gets one retry with feedback before the run fails.
 - Email HTML is generated only from escaped text in a fixed, table-based layout
   with inline styles: no model-supplied HTML, links, scripts, or images.
 
@@ -128,11 +150,17 @@ Set these in the **ColdOutreach** Convex dashboard's environment settings:
 
 | Variable                | Purpose                                              |
 | ----------------------- | ---------------------------------------------------- |
+| `ALLOWED_EMAILS`        | Comma-separated emails allowed to sign in (required) |
+| `JWT_PRIVATE_KEY`       | Convex Auth signing key (see "Sign-in setup")        |
+| `JWKS`                  | Convex Auth public key set (see "Sign-in setup")     |
+| `SITE_URL`              | Frontend URL, e.g. `http://localhost:5173`           |
+| `FIRECRAWL_API_KEY`     | Optional: render JavaScript-only sites (paid API)    |
+| `OPENAI_BALANCE_USD`    | Optional: starting OpenAI credit for the navbar pill |
 | `OPENAI_API_KEY`        | Website analysis and email composition               |
 | `OPENAI_OUTREACH_MODEL` | Optional model override (default `gpt-4o-mini`)      |
 | `GEMINI_API_KEY`        | Company discovery (Google Search grounding)          |
 | `GEMINI_API_KEY_PAID`   | Optional paid Gemini fallback                        |
-| `GEMINI_RESEARCH_MODEL` | Optional discovery model override                    |
+| `GEMINI_RESEARCH_MODEL` | Optional model override (default `gemini-3.8-flash`) |
 | `GMAIL_USER`            | Gmail sending account                                |
 | `GMAIL_APP_PASSWORD`    | Gmail app password (requires 2-Step Verification)    |
 | `GMAIL_FROM`            | Optional sender display name                         |
@@ -142,6 +170,30 @@ Never put provider keys, Gmail passwords, or Convex deploy keys in `VITE_*`
 variables: Vite embeds those variables in the browser bundle. The frontend needs
 only `VITE_CONVEX_URL`. Use the dashboard or the CLI's interactive
 `bunx convex env set NAME` prompt rather than putting secrets in shell commands.
+
+The navbar shows the estimated OpenAI spend until a starting balance is known;
+set `OPENAI_BALANCE_USD`, or run
+`bunx convex run usageDb:setBalance '{"provider":"openai","balanceUsd":10}'`
+from `backend/` after topping up, to show the remaining balance instead.
+
+### Sign-in setup
+
+Sign-in uses [Convex Auth](https://labs.convex.dev/auth) with email and
+password. A new deployment needs `JWT_PRIVATE_KEY`, `JWKS`, and `SITE_URL`
+(run `bunx @convex-dev/auth` from `backend/` to generate and set them), plus
+`ALLOWED_EMAILS`. With `ALLOWED_EMAILS` unset or empty, nobody can sign in or
+call any function. Set it interactively so it stays out of shell history:
+
+```bash
+cd backend
+bunx convex env set ALLOWED_EMAILS   # prompts for the value, e.g. you@example.com
+```
+
+Then open the app and use **Create account** once with that address. Create
+the account promptly after allowlisting it: whoever signs up first with an
+allowlisted address owns that account (there is no email verification). To
+revoke an account, remove it from `ALLOWED_EMAILS` (immediate) and delete it:
+`bunx convex run operator:removeAccount '{"email":"old@example.com"}'`.
 
 ### Self-test send
 
@@ -154,6 +206,12 @@ bunx convex run sendActions:sendSelfTest '{"companyId":"example.com"}'
 ```
 
 Self-tests are marked as tests in History and excluded from the contact ledgers.
+To rehearse the full scheduled path to a real recipient without contacting
+them, set `GMAIL_REDIRECT_TO` to your own inbox, schedule an approved draft,
+then unset it. Remove test records from History with
+`bunx convex run send:purgeTestHistory` (optionally
+`'{"canceledRecipients":["placeholder@example.com"]}'` to also drop canceled
+placeholder rows); real sent emails are never touched.
 
 ### Data migration
 
@@ -172,13 +230,14 @@ approved snapshot and marks it `legacy-blocked`, so legacy drafts cannot be sent
 
 ### Security boundaries and checks
 
-This app has **no user authentication or per-user authorization** on its public
-Convex functions. Treat it as a single-operator development tool; anyone who
-knows the deployment URL can call its functions (including queueing sends for
-approved drafts). Add authentication and authorization before deploying it for
-business users or multiple users, or storing sensitive customer information.
-Keeping API keys server-side does not prevent anonymous callers from invoking
-public functions. Settings reject values that look like credentials.
+Every public Convex function except the sign-in endpoints requires a
+signed-in user whose email is on `ALLOWED_EMAILS`; the backend checks this on
+each call (a test enumerates every public function to enforce it). This is
+**single-operator** access control: all allowlisted users share the same
+companies, drafts, settings, history, and Gmail account. There is no per-user
+data separation, no email verification, and no roles, so do not treat it as a
+multi-tenant or public multi-user service. Settings reject values that look like
+credentials.
 
 Before pushing, scan the complete Git history with Gitleaks and scan an export
 of the staged files separately:
@@ -222,11 +281,13 @@ bun run --cwd frontend test:watch
 
 ```
 common/src/        utils + outreachEmail (content types, escaped HTML/text, claim checks)
-backend/convex/    schema, settings, outreachRuns (+ outreachPipeline action),
-                   send (queue/ledgers/history) + sendActions (Gmail), companies,
-                   emails, migrations, usageDb
+backend/convex/    schema, auth + operator (sign-in, allowlist), settings,
+                   outreachRuns (+ outreachPipeline action), send (queue/ledgers/
+                   history) + sendActions (Gmail), delivery + mailbox (bounce/
+                   reply detection, crons), companies, emails, migrations, usageDb
 backend/convex/outreach/  runtime-agnostic pipeline modules: websiteEvidence,
-                   prompts, modelOutput, pipeline, dispatch, smtpOutcome, settingsModel
+                   pageRenderer, prompts, modelOutput, pipeline, dispatch,
+                   smtpOutcome, mailboxSignals, operatorAccess, settingsModel
 backend/tests/     backend tests (pure modules + convex-test integration)
 frontend/src/      React app; components/<feature>/ with folder-local styles.css
 ```

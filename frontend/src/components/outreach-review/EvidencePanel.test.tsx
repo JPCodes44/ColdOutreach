@@ -20,4 +20,17 @@ describe('EvidencePanel', () => {
     expect(screen.getByText('All 2 evidence facts')).toBeInTheDocument();
     expect(screen.getByText(/No HTML form was found/)).toBeInTheDocument();
   });
+
+  it('marks pages that were rendered in a browser', () => {
+    render(
+      <EvidencePanel
+        evidence={{
+          ...evidence!,
+          sources: [{ ...evidence!.sources[0]!, rendered: true }],
+        }}
+        analysis={analysis!}
+      />,
+    );
+    expect(screen.getByText(/rendered in a browser/)).toBeInTheDocument();
+  });
 });

@@ -13,6 +13,7 @@ import {
   collectWebsiteEvidence,
 } from './outreach/websiteEvidence';
 import { redactSecrets } from './outreach/smtpOutcome';
+import { firecrawlRenderer } from './outreach/pageRenderer';
 
 const DEFAULT_MODEL = 'gpt-4o-mini';
 
@@ -22,6 +23,7 @@ function configuredSecrets(): (string | undefined)[] {
     process.env.GEMINI_API_KEY,
     process.env.GEMINI_API_KEY_PAID,
     process.env.GMAIL_APP_PASSWORD,
+    process.env.FIRECRAWL_API_KEY,
   ];
 }
 
@@ -64,6 +66,10 @@ export const execute = internalAction({
         collectEvidence: (domain) =>
           collectWebsiteEvidence(domain, {
             fetch: (url, init) => fetch(url, init),
+            renderPage: firecrawlRenderer(
+              process.env.FIRECRAWL_API_KEY,
+              (url, init) => fetch(url, init),
+            ),
             resolveHost: async (hostname) =>
               (await lookup(hostname, { all: true, verbatim: true })).map(
                 (entry) => entry.address,

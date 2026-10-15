@@ -421,3 +421,29 @@
   font-size: 12px;
   line-height: 1.5;
 }
+
+.reviewClaims {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.reviewClaimList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  border: 0;
+}
+
+.reviewClaimLegend {
+  float: left;
+  margin-bottom: 4px;
+  padding: 0;
+}
+
+.reviewClaim {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}

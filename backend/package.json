@@ -10,10 +10,13 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@auth/core": "0.41.3",
+    "@convex-dev/auth": "0.0.96",
     "@emailstrat/common": "*",
     "@google/genai": "^2.7.0",
     "@types/nodemailer": "^8.0.0",
     "convex": "^1.17.4",
+    "imapflow": "2.1.2",
     "nodemailer": "^8.0.10",
     "openai": "^4.0.0"
   },

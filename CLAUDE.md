@@ -25,7 +25,7 @@ Bun is the package manager and task runner (it reads the npm-style `workspaces` 
 
 ## Backend / Convex caveat
 
-`backend/convex/_generated/` is untracked; create it with `bun run setup:backend` (or `cd backend && bunx convex codegen`) before backend typecheck/tests. Only deploy to `jp-mak/coldoutreach` (`tremendous-beagle-451`), never EmailStrat. Secrets live only in Convex environment variables. The app has no end-user authentication.
+`backend/convex/_generated/` is untracked; create it with `bun run setup:backend` (or `cd backend && bunx convex codegen`) before backend typecheck/tests. Only deploy to `jp-mak/coldoutreach` (`tremendous-beagle-451`), never EmailStrat. Secrets live only in Convex environment variables. Access is single-operator: Convex Auth (password) plus the `ALLOWED_EMAILS` allowlist; every public query/mutation calls `requireOperator(ctx)` and every public action `requireOperatorAction(ctx)` (`convex/operator.ts`), and `tests/operator-access.test.ts` fails if a new public function is not listed and guarded. Never call Convex from the frontend through a separate unauthenticated client; use the React hooks.
 
 ## Frontend styling rules (enforced)
 

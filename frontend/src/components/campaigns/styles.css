@@ -203,10 +203,13 @@
   overflow-x: auto;
 }
 
+/* min-width = the sum of the column flex-bases below (48 + 180 + 150 + 140 +
+   200 + 180 + 90 + 132), so columns never shrink below their basis and the
+   last (Score) column is never clipped; narrower screens scroll instead. */
 .campaignTable {
   display: flex;
   flex-direction: column;
-  min-width: 1040px;
+  min-width: 1120px;
   width: 100%;
 }
 
@@ -368,6 +371,7 @@
 }
 .campaignColScore {
   flex: 0 0 132px;
+  padding-right: 16px;
 }
 
 .campaignDash {

@@ -7,6 +7,7 @@ import {
   mutation,
   type ActionCtx,
 } from './_generated/server';
+import { requireOperator, requireOperatorAction } from './operator';
 import { internal } from './_generated/api';
 import { computeCostUsd, GEMINI_GROUNDING_EST_USD } from './pricing';
 import { runGeminiWithFallback } from './gemini';
@@ -168,6 +169,7 @@ export const research = action({
     limit: v.number(),
   },
   handler: async (ctx, args): Promise<CompanyResearchResponse> => {
+    await requireOperatorAction(ctx);
     const requestedLimit = Math.max(1, Math.floor(args.limit));
     const discoveryLimit = Math.min(requestedLimit * 2, 100);
     const excludedCompanyDomains = await ctx.runQuery(
@@ -191,7 +193,8 @@ export const research = action({
     // pay once the free quota is spent. Resets daily, so the free key is tried
     // first again after midnight Pacific.
     const paidKey = env.GEMINI_API_KEY_PAID;
-    const model = env.GEMINI_RESEARCH_MODEL ?? 'gemini-2.5-flash';
+    // gemini-2.5-flash is no longer offered to new API users.
+    const model = env.GEMINI_RESEARCH_MODEL ?? 'gemini-3.8-flash';
 
     // Free key first, falling back to the paid key on quota exhaustion.
     const result = await runGeminiWithFallback({
@@ -306,6 +309,7 @@ export const importCompanies = mutation({
   args: { companies: v.array(companyInput) },
   returns: v.object({ inserted: v.number() }),
   handler: async (ctx, { companies }) => {
+    await requireOperator(ctx);
     let inserted = 0;
     for (const company of companies) {
       const existing = await ctx.db
@@ -334,6 +338,7 @@ export const importCompanies = mutation({
 export const deleteCompanies = mutation({
   args: { externalIds: v.array(v.string()) },
   handler: async (ctx, { externalIds }) => {
+    await requireOperator(ctx);
     for (const externalId of externalIds) {
       if (await hasActiveSends(ctx, externalId)) {
         const company = await ctx.db

@@ -1,5 +1,6 @@
 import { v } from 'convex/values';
 import { internalMutation, mutation, query } from './_generated/server';
+import { requireOperator } from './operator';
 import { GEMINI_FREE_DAILY_LIMIT, nextPacificMidnightIso } from './pricing';
 
 const providerValidator = v.union(
@@ -30,6 +31,7 @@ function freeCounterExpired(freeResetAt: string | undefined): boolean {
 interface BalancePatch {
   updatedAt: string;
   balanceUsd?: number;
+  spentUsd?: number;
   freeRequestsRemaining?: number;
   freeResetAt?: string;
 }
@@ -73,14 +75,18 @@ export const recordUsage = internalMutation({
         ? nextPacificMidnightIso()
         : existing?.freeResetAt;
     } else {
-      // openai or gemini paid tier: drain estimated dollars from the top-up.
+      // openai or gemini paid tier: always total the estimated spend, and
+      // drain a remaining balance only once a starting balance is known (set
+      // via setBalance or the *_BALANCE_USD env var), so it never goes
+      // negative from an unknown start.
       const seedEnv =
         args.provider === 'openai'
           ? 'OPENAI_BALANCE_USD'
           : 'GEMINI_PAID_BALANCE_USD';
-      const start = existing?.balanceUsd ?? getEnvNumber(seedEnv) ?? 0;
       const spend = (args.costUsd ?? 0) + (args.groundingCostUsd ?? 0);
-      patch.balanceUsd = start - spend;
+      patch.spentUsd = (existing?.spentUsd ?? 0) + spend;
+      const start = existing?.balanceUsd ?? getEnvNumber(seedEnv);
+      if (start !== undefined) patch.balanceUsd = start - spend;
     }
 
     if (existing) {
@@ -102,6 +108,7 @@ export const recordUsage = internalMutation({
 export const getBalances = query({
   args: {},
   handler: async (ctx) => {
+    await requireOperator(ctx);
     const rows = await ctx.db.query('providerBalances').collect();
     const byProvider = new Map(rows.map((row) => [row.provider, row]));
     const gemini = byProvider.get('gemini');
@@ -110,10 +117,14 @@ export const getBalances = query({
       : (gemini?.freeRequestsRemaining ?? GEMINI_FREE_DAILY_LIMIT);
 
     return {
-      openai: { balanceUsd: byProvider.get('openai')?.balanceUsd ?? null },
+      openai: {
+        balanceUsd: byProvider.get('openai')?.balanceUsd ?? null,
+        spentUsd: byProvider.get('openai')?.spentUsd ?? 0,
+      },
       deepseek: { balanceUsd: byProvider.get('deepseek')?.balanceUsd ?? null },
       gemini: {
         paidBalanceUsd: gemini?.balanceUsd ?? null,
+        paidSpentUsd: gemini?.spentUsd ?? 0,
         freeRequestsRemaining: freeRemaining,
         freeLimit: GEMINI_FREE_DAILY_LIMIT,
       },
@@ -129,6 +140,7 @@ export const getBalances = query({
 export const setBalance = mutation({
   args: { provider: providerValidator, balanceUsd: v.number() },
   handler: async (ctx, { provider, balanceUsd }) => {
+    await requireOperator(ctx);
     const existing = await ctx.db
       .query('providerBalances')
       .withIndex('by_provider', (q) => q.eq('provider', provider))

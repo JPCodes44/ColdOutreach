@@ -43,6 +43,7 @@ export function reviewFixture(overrides: Partial<ReviewData> = {}): ReviewData {
         signature: 'Sam Rivera',
       },
       approvedAt: null,
+      acknowledgedClaims: [],
       editedAt: null,
       updatedAt: '2026-10-14T12:00:00.000Z',
       settingsVersion: 3,

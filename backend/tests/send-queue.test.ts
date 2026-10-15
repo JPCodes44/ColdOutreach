@@ -1,16 +1,9 @@
-import { convexTest } from 'convex-test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, internal } from '../convex/_generated/api';
 import type { Id } from '../convex/_generated/dataModel';
-import schema from '../convex/schema';
 import type { OutreachEmailContent } from '@emailstrat/common';
 
-// Lazily-loaded function modules for convex-test (Vite's import.meta.glob).
-const modules = (
-  import.meta as unknown as {
-    glob: (pattern: string) => Record<string, () => Promise<unknown>>;
-  }
-).glob('../convex/**/*.*s');
+import { signedInOperator } from './operatorHarness';
 
 const CONTENT: OutreachEmailContent = {
   subject: 'An idea for Acme inquiries',
@@ -68,10 +61,10 @@ const ANALYSIS = {
   droppedCount: 0,
 };
 
-type T = ReturnType<typeof setup>;
+type T = Awaited<ReturnType<typeof setup>>;
 
 function setup() {
-  return convexTest(schema, modules);
+  return signedInOperator();
 }
 
 async function addCompany(
@@ -161,7 +154,7 @@ afterEach(() => {
 
 describe('settings', () => {
   it('starts from defaults and saves immutable versions', async () => {
-    const t = setup();
+    const t = await setup();
     expect((await t.query(api.settings.get, {})).version).toBe(0);
     const input = {
       niche: 'Dental clinics',
@@ -198,7 +191,7 @@ describe('settings', () => {
 
 describe('pipeline runs and drafts', () => {
   it('snapshots the settings version and refuses a concurrent run', async () => {
-    const t = setup();
+    const t = await setup();
     await addCompany(t, 'acme.test');
     await t.mutation(api.settings.save, {
       niche: 'N1',
@@ -229,7 +222,7 @@ describe('pipeline runs and drafts', () => {
   });
 
   it('never lets an older run overwrite a newer draft', async () => {
-    const t = setup();
+    const t = await setup();
     await addCompany(t, 'acme.test');
     const settings = {
       version: 0,
@@ -272,7 +265,7 @@ describe('pipeline runs and drafts', () => {
   });
 
   it('abandons a stale run, ignores its late result, and keeps the last draft on failure', async () => {
-    const t = setup();
+    const t = await setup();
     await addCompany(t, 'acme.test');
     await generate(t, 'acme.test', { ...CONTENT, subject: 'Good draft' });
     vi.setSystemTime(Date.now() + 1000);
@@ -325,7 +318,7 @@ describe('pipeline runs and drafts', () => {
   });
 
   it('withdraws approval when the draft is edited and validates edits', async () => {
-    const t = setup();
+    const t = await setup();
     await approved(t, 'acme.test');
     await t.mutation(api.outreachRuns.saveDraftEdits, {
       companyId: 'acme.test',
@@ -350,9 +343,58 @@ describe('pipeline runs and drafts', () => {
   });
 });
 
+describe('approval checks', () => {
+  it('refuses a draft without a signature', async () => {
+    const t = await setup();
+    await addCompany(t, 'acme.test');
+    await generate(t, 'acme.test', { ...CONTENT, signature: '  ' });
+    await expect(
+      t.mutation(api.outreachRuns.approveDraft, { companyId: 'acme.test' }),
+    ).rejects.toThrow('Add a signature before approving');
+  });
+
+  it('requires each flagged claim to be acknowledged, and records it', async () => {
+    const t = await setup();
+    await addCompany(t, 'acme.test');
+    await generate(t, 'acme.test', {
+      ...CONTENT,
+      opening: 'Hi Acme,\n\nThis will boost your bookings by 30%.',
+    });
+    await expect(
+      t.mutation(api.outreachRuns.approveDraft, { companyId: 'acme.test' }),
+    ).rejects.toThrow('Confirm these claims are accurate');
+    await expect(
+      t.mutation(api.outreachRuns.approveDraft, {
+        companyId: 'acme.test',
+        acknowledgedClaims: ['30%'],
+      }),
+    ).rejects.toThrow('boost your bookings');
+    await t.mutation(api.outreachRuns.approveDraft, {
+      companyId: 'acme.test',
+      acknowledgedClaims: ['boost your bookings', '30%'],
+    });
+    const review = await t.query(api.outreachRuns.getReview, {
+      companyId: 'acme.test',
+    });
+    expect(review?.draft?.status).toBe('approved');
+    expect(review?.draft?.acknowledgedClaims).toEqual([
+      'boost your bookings',
+      '30%',
+    ]);
+
+    await t.mutation(api.outreachRuns.unapproveDraft, {
+      companyId: 'acme.test',
+    });
+    const after = await t.query(api.outreachRuns.getReview, {
+      companyId: 'acme.test',
+    });
+    expect(after?.draft?.acknowledgedClaims).toEqual([]);
+  });
+});
+
 describe('queueing approved snapshots', () => {
   it('requires an approved draft and valid recipients', async () => {
-    const t = setup();
+    const t = await setup();
     await addCompany(t, 'acme.test');
     await expect(enqueue(t, ['acme.test'])).rejects.toThrow(
       'generate and approve',
@@ -371,7 +413,7 @@ describe('queueing approved snapshots', () => {
   });
 
   it('keeps the queued content immutable after edits, regeneration, and Settings changes', async () => {
-    const t = setup();
+    const t = await setup();
     await approved(t, 'acme.test');
     await enqueue(t, ['acme.test']);
     const [before] = await queueRows(t);
@@ -402,7 +444,7 @@ describe('queueing approved snapshots', () => {
   });
 
   it('prevents duplicate queueing of a company or recipient', async () => {
-    const t = setup();
+    const t = await setup();
     await approved(t, 'acme.test');
     await enqueue(t, ['acme.test']);
     await expect(enqueue(t, ['acme.test'])).rejects.toThrow(
@@ -427,7 +469,7 @@ describe('dispatch outcomes', () => {
   }
 
   it('claims each row once so it can never be dispatched twice', async () => {
-    const t = setup();
+    const t = await setup();
     const itemId = await queuedItem(t);
     const first = await t.mutation(internal.send.claimQueueItem, { itemId });
     const second = await t.mutation(internal.send.claimQueueItem, { itemId });
@@ -436,7 +478,7 @@ describe('dispatch outcomes', () => {
   });
 
   it('records sent only after acceptance and preserves history through cleanup', async () => {
-    const t = setup();
+    const t = await setup();
     const itemId = await queuedItem(t);
     // Not claimed yet: an acceptance report for an unclaimed row is ignored.
     await t.mutation(internal.send.markQueueItemSent, {
@@ -490,7 +532,7 @@ describe('dispatch outcomes', () => {
   });
 
   it('releases the reservation on a definite failure without recording a send', async () => {
-    const t = setup();
+    const t = await setup();
     const itemId = await queuedItem(t);
     await t.mutation(internal.send.claimQueueItem, { itemId });
     await t.mutation(internal.send.markQueueItemFailed, {
@@ -508,7 +550,7 @@ describe('dispatch outcomes', () => {
   });
 
   it('holds uncertain outcomes until a human resolves them', async () => {
-    const t = setup();
+    const t = await setup();
     const itemId = await queuedItem(t);
     await t.mutation(internal.send.claimQueueItem, { itemId });
     await t.mutation(internal.send.markQueueItemUncertain, {
@@ -539,7 +581,7 @@ describe('dispatch outcomes', () => {
   });
 
   it('frees the recipient when an uncertain send is confirmed not sent', async () => {
-    const t = setup();
+    const t = await setup();
     const itemId = await queuedItem(t);
     await t.mutation(internal.send.claimQueueItem, { itemId });
     await t.mutation(internal.send.markQueueItemUncertain, {
@@ -558,7 +600,7 @@ describe('dispatch outcomes', () => {
   });
 
   it('cancels queued sends so they cannot be claimed', async () => {
-    const t = setup();
+    const t = await setup();
     const itemId = await queuedItem(t);
     expect(
       await t.mutation(api.send.cancelScheduledSends, {
@@ -575,7 +617,7 @@ describe('dispatch outcomes', () => {
   });
 
   it('treats missing Gmail configuration as a definite failure (real dispatcher, no network)', async () => {
-    const t = setup();
+    const t = await setup();
     const itemId = await queuedItem(t);
     await t.action(internal.sendActions.processQueueItem, { itemId });
     const [row] = await queueRows(t);
@@ -585,7 +627,7 @@ describe('dispatch outcomes', () => {
   });
 
   it('refuses to delete a company with sends in flight', async () => {
-    const t = setup();
+    const t = await setup();
     await queuedItem(t);
     await expect(
       t.mutation(api.companies.deleteCompanies, { externalIds: ['acme.test'] }),
@@ -595,7 +637,7 @@ describe('dispatch outcomes', () => {
 
 describe('self-test sends', () => {
   it('are labeled and excluded from ledgers and company status', async () => {
-    const t = setup();
+    const t = await setup();
     await addCompany(t, 'acme.test');
     await generate(t, 'acme.test');
     const itemId = await t.mutation(internal.send.enqueueSelfTest, {
@@ -628,7 +670,7 @@ describe('self-test sends', () => {
 
 describe('legacy job-application data', () => {
   it('blocks legacy queued rows and marks old artifacts obsolete', async () => {
-    const t = setup();
+    const t = await setup();
     await addCompany(t, 'old.test');
     const legacyId = await t.run(async (ctx) => {
       await ctx.db.insert('artifacts', {
@@ -687,5 +729,70 @@ describe('legacy job-application data', () => {
     await expect(enqueue(t, ['old.test'])).rejects.toThrow(
       'generate and approve',
     );
+  });
+});
+
+describe('purgeTestHistory', () => {
+  it('removes self-tests and named canceled rows but keeps real history', async () => {
+    const t = await setup();
+    const base = {
+      batchId: 'b',
+      companyId: 'acme.test',
+      company: 'ACME',
+      subject: 's',
+      scheduledAt: '2026-10-14T00:00:00.000Z',
+      createdAt: '2026-10-14T00:00:00.000Z',
+    };
+    await t.run(async (ctx) => {
+      const testRow = await ctx.db.insert('sendQueue', {
+        ...base,
+        to: 'me@self.test',
+        status: 'sent',
+        isTest: true,
+      });
+      await ctx.db.insert('sendQueue', {
+        ...base,
+        to: 'verification@example.com',
+        status: 'canceled',
+      });
+      const realRow = await ctx.db.insert('sendQueue', {
+        ...base,
+        to: 'owner@acme.test',
+        status: 'sent',
+      });
+      const sent = {
+        companyId: 'acme.test',
+        companyName: 'ACME',
+        companyDomain: 'acme.test',
+        actualTo: 'x',
+        intendedTo: 'x',
+        redirected: false,
+        subject: 's',
+        text: 't',
+        html: 'h',
+        sentAt: '2026-10-14T00:00:00.000Z',
+        acceptance: 'smtp-accepted' as const,
+      };
+      await ctx.db.insert('sentEmails', {
+        ...sent,
+        queueItemId: testRow,
+        isTest: true,
+      });
+      await ctx.db.insert('sentEmails', {
+        ...sent,
+        queueItemId: realRow,
+        isTest: false,
+      });
+    });
+    await expect(
+      t.mutation(internal.send.purgeTestHistory, {
+        canceledRecipients: ['Verification@example.com'],
+      }),
+    ).resolves.toEqual({ queueRows: 2, sentEmails: 1 });
+    const remaining = await t.run(async (ctx) => ({
+      queue: (await ctx.db.query('sendQueue').collect()).map((r) => r.to),
+      sent: (await ctx.db.query('sentEmails').collect()).map((r) => r.isTest),
+    }));
+    expect(remaining).toEqual({ queue: ['owner@acme.test'], sent: [false] });
   });
 });

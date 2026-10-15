@@ -17,6 +17,7 @@ describe('SentTable', () => {
           }),
         ]}
         onOpen={onOpen}
+        onCheckInbox={vi.fn()}
       />,
     );
     expect(
@@ -26,10 +27,35 @@ describe('SentTable', () => {
     expect(screen.getByText(/redirected to me@inbox.test/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /Acme/ }));
     expect(onOpen).toHaveBeenCalledWith('s1');
+    expect(screen.getByText('Accepted')).toBeInTheDocument();
+    expect(screen.getByText(/every 30 minutes/)).toBeInTheDocument();
+  });
+
+  it('marks bounced and replied emails and offers an inbox check', async () => {
+    const onCheckInbox = vi.fn().mockResolvedValue({ bounced: 0, replied: 1 });
+    render(
+      <SentTable
+        rows={[
+          sentRow({ bouncedAt: '2026-10-14T13:00:00.000Z' }),
+          sentRow({ id: 's2', repliedAt: '2026-10-14T14:00:00.000Z' }),
+        ]}
+        onOpen={vi.fn()}
+        onCheckInbox={onCheckInbox}
+      />,
+    );
+    expect(screen.getByText('Bounced')).toBeInTheDocument();
+    expect(screen.getByText('Replied')).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Check inbox now' }),
+    );
+    expect(onCheckInbox).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'Checked: 0 new bounces, 1 new reply',
+    );
   });
 
   it('shows an empty state', () => {
-    render(<SentTable rows={[]} onOpen={vi.fn()} />);
+    render(<SentTable rows={[]} onOpen={vi.fn()} onCheckInbox={vi.fn()} />);
     expect(screen.getByText('No emails sent yet.')).toBeInTheDocument();
   });
 });

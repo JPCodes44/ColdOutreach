@@ -72,3 +72,26 @@ export const retireLegacyJobData = internalMutation({
     return { artifactsRetired, sendsBlocked };
   },
 });
+
+/**
+ * Older trackers drained a balance that started at an unknown (zero) value,
+ * leaving negative "balances". Convert those into spend totals:
+ * `bunx convex run migrations:convertUnseededBalances`.
+ */
+export const convertUnseededBalances = internalMutation({
+  args: {},
+  returns: v.object({ converted: v.number() }),
+  handler: async (ctx) => {
+    let converted = 0;
+    for (const row of await ctx.db.query('providerBalances').collect()) {
+      if (row.provider === 'deepseek') continue;
+      if (row.balanceUsd === undefined || row.balanceUsd >= 0) continue;
+      await ctx.db.patch(row._id, {
+        balanceUsd: undefined,
+        spentUsd: (row.spentUsd ?? 0) - row.balanceUsd,
+      });
+      converted += 1;
+    }
+    return { converted };
+  },
+});

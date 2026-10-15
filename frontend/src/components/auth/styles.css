@@ -1,0 +1,90 @@
+.authScreen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 16px;
+  background: #f7f9fb;
+  color: #191c1e;
+}
+
+.authCard {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  max-width: 380px;
+  padding: 28px;
+  background: #ffffff;
+  border: 1px solid #c3c6d7;
+  border-radius: 12px;
+}
+
+.authTitle {
+  margin: 0;
+  font-size: 22px;
+}
+
+.authMuted {
+  margin: 0;
+  color: #434655;
+  font-size: 14px;
+}
+
+.authField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.authField input {
+  padding: 10px 12px;
+  border: 1px solid #c3c6d7;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 400;
+}
+
+.authError {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #ffdad6;
+  color: #93000a;
+  font-size: 13px;
+}
+
+.authPrimary {
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: #004ac6;
+  color: #ffffff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.authPrimary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.authLink,
+.authSignOut {
+  padding: 6px 10px;
+  border: 0;
+  background: transparent;
+  color: #004ac6;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.authSignOut {
+  border: 1px solid #c3c6d7;
+  border-radius: 8px;
+  color: #434655;
+}

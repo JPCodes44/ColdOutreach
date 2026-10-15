@@ -12,6 +12,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json --noEmit"
   },
   "dependencies": {
+    "@auth/core": "0.41.3",
+    "@convex-dev/auth": "0.0.96",
     "@emailstrat/common": "*",
     "@handsontable/react-wrapper": "^17.1.0",
     "convex": "^1.39.1",

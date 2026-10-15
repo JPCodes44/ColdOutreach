@@ -16,9 +16,18 @@ export type FetchLike = (
 /** Resolve a hostname to its IP addresses (v4 or v6). */
 export type ResolveHost = (hostname: string) => Promise<string[]>;
 
+/**
+ * Optional headless-browser rendering for pages whose static HTML is an empty
+ * JavaScript shell. Returns the rendered HTML and the final URL loaded.
+ */
+export type RenderPage = (
+  url: string,
+) => Promise<{ finalUrl: string; html: string }>;
+
 export interface RetrievalDeps {
   fetch: FetchLike;
   resolveHost: ResolveHost;
+  renderPage?: RenderPage;
   now?: () => Date;
   timeoutMs?: number;
   maxBytes?: number;
@@ -52,6 +61,8 @@ export interface ExtractedPage {
   chatWidgets: string[];
   bookingTools: string[];
   links: string[];
+  /** True when the HTML came from the headless-browser fallback. */
+  rendered?: boolean;
 }
 
 export type EvidenceKind =
@@ -74,6 +85,7 @@ export interface EvidenceSource {
   url: string;
   title: string;
   fetchedAt: string;
+  rendered?: boolean;
 }
 
 export interface PageExcerpt {
@@ -697,7 +709,9 @@ export function buildEvidence(
     add(
       'absence',
       firstUrl,
-      `No HTML form was found in the static HTML of the ${pages.length} retrieved page(s) (${reviewed}). Forms injected later by JavaScript would not be visible to this review.`,
+      pages.every((page) => page.rendered === true)
+        ? `No HTML form was found on the ${pages.length} retrieved page(s) after rendering them in a browser (${reviewed}).`
+        : `No HTML form was found in the static HTML of the ${pages.length} retrieved page(s) (${reviewed}). Forms injected later by JavaScript would not be visible to this review.`,
     );
   }
   if (
@@ -732,6 +746,7 @@ export function buildEvidence(
       url: page.url,
       title: page.title,
       fetchedAt: page.fetchedAt,
+      ...(page.rendered === true ? { rendered: true } : {}),
     })),
     facts,
     excerpts: pages.map((page) => ({
@@ -750,22 +765,22 @@ export async function collectWebsiteEvidence(
   domain: string,
   deps: RetrievalDeps,
 ): Promise<WebsiteEvidence> {
-  const home = await fetchPage(websiteUrlFromDomain(domain), deps);
-  const homePage = extractPage(home.html, home.finalUrl, home.fetchedAt);
-  if (homePage.text.length < 40 && homePage.forms.length === 0) {
+  const homePage = await retrievePage(websiteUrlFromDomain(domain), deps);
+  if (looksEmpty(homePage)) {
+    const host = new URL(homePage.url).host;
     throw new RetrievalError(
-      `${new URL(home.finalUrl).host} returned almost no readable content (it may require JavaScript).`,
+      deps.renderPage === undefined
+        ? `${host} returned almost no readable content (it may require JavaScript; set FIRECRAWL_API_KEY to enable rendering).`
+        : `${host} returned almost no readable content, even after rendering.`,
     );
   }
   const pages = [homePage];
   const skipped: WebsiteEvidence['skipped'] = [];
   for (const link of selectFollowUpLinks(homePage, deps.maxExtraPages ?? 3)) {
     try {
-      const fetched = await fetchPage(new URL(link), deps);
-      if (pages.some((page) => page.url === fetched.finalUrl)) continue;
-      pages.push(
-        extractPage(fetched.html, fetched.finalUrl, fetched.fetchedAt),
-      );
+      const page = await retrievePage(new URL(link), deps);
+      if (pages.some((existing) => existing.url === page.url)) continue;
+      pages.push(page);
     } catch (error) {
       skipped.push({
         url: link,
@@ -777,4 +792,48 @@ export async function collectWebsiteEvidence(
     }
   }
   return { ...buildEvidence(pages), skipped };
+}
+
+/** Too little content to review: likely a client-side-rendered shell. */
+function looksEmpty(page: ExtractedPage): boolean {
+  return page.text.length < 40 && page.forms.length === 0;
+}
+
+/**
+ * Fetch a page's static HTML; if it is an empty JavaScript shell and a
+ * renderer is configured, render it instead. The same public-address checks
+ * apply to the URL handed to the renderer and to the URL it ended on.
+ */
+async function retrievePage(
+  url: URL,
+  deps: RetrievalDeps,
+): Promise<ExtractedPage> {
+  const fetched = await fetchPage(url, deps);
+  const page = extractPage(fetched.html, fetched.finalUrl, fetched.fetchedAt);
+  if (!looksEmpty(page) || deps.renderPage === undefined) return page;
+
+  const target = new URL(fetched.finalUrl);
+  await assertSafeUrl(target, deps.resolveHost);
+  let rendered: { finalUrl: string; html: string };
+  try {
+    rendered = await deps.renderPage(target.toString());
+  } catch (error) {
+    if (error instanceof RetrievalError) throw error;
+    throw new RetrievalError(`Rendering ${target.host} failed.`);
+  }
+  const finalUrl = new URL(rendered.finalUrl || target.toString());
+  const site = (host: string) => host.replace(/^www\./, '');
+  if (site(finalUrl.host) !== site(target.host)) {
+    throw new RetrievalError(
+      `Rendering ${target.host} ended on a different site (${finalUrl.host}).`,
+    );
+  }
+  await assertSafeUrl(finalUrl, deps.resolveHost);
+  const maxBytes = deps.maxBytes ?? 1_500_000;
+  const html = rendered.html.slice(0, maxBytes);
+  const now = deps.now ?? (() => new Date());
+  return {
+    ...extractPage(html, finalUrl.toString(), now().toISOString()),
+    rendered: true,
+  };
 }

@@ -39,6 +39,17 @@ export interface SentEmailRow {
   acceptance: 'smtp-accepted' | 'manually-confirmed';
   providerMessageId: string | null;
   isTest: boolean;
+  /** When a bounce notice for this message reached the Gmail inbox. */
+  bouncedAt: string | null;
+  bounceDetail: string | null;
+  /** When a reply referencing this message reached the Gmail inbox. */
+  repliedAt: string | null;
+}
+
+/** Result of `delivery:checkNow`: newly detected signals. */
+export interface InboxCheckResult {
+  bounced: number;
+  replied: number;
 }
 
 /** Full stored content from `send:getSentEmail`. */
@@ -72,6 +83,15 @@ export type QueueRowItemProps = QueueActionsProps;
 export interface SentTableProps {
   rows: SentEmailRow[] | undefined;
   onOpen: (id: string) => void;
+  onCheckInbox: () => Promise<InboxCheckResult>;
+}
+
+export interface DeliveryChipProps {
+  row: Pick<SentEmailRow, 'bouncedAt' | 'bounceDetail' | 'repliedAt'>;
+}
+
+export interface CheckInboxProps {
+  onCheck: () => Promise<InboxCheckResult>;
 }
 
 export interface SentEmailViewerProps {

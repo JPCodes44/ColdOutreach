@@ -9,7 +9,13 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from './_generated/server';
-import { validateOutreachContent } from '@emailstrat/common';
+import { requireOperator } from './operator';
+import {
+  checkDraftForApproval,
+  claimsAcknowledged,
+  evidenceCorpus,
+  validateOutreachContent,
+} from '@emailstrat/common';
 import { loadCurrentSettings } from './settings';
 import {
   analysisValidator,
@@ -102,6 +108,7 @@ export const requestRuns = mutation({
     skipped: v.array(v.object({ companyId: v.string(), reason: v.string() })),
   }),
   handler: async (ctx, { companyIds }) => {
+    await requireOperator(ctx);
     const unique = [...new Set(companyIds)];
     if (unique.length > MAX_RUNS_PER_REQUEST) {
       throw new Error(
@@ -236,6 +243,7 @@ export const completeRun = internalMutation({
       content,
       status: 'ready' as const,
       approvedAt: undefined,
+      acknowledgedClaims: undefined,
       editedAt: undefined,
       updatedAt: nowIso,
     };
@@ -256,6 +264,7 @@ export const completeRun = internalMutation({
 export const listPipelineCompanies = query({
   args: {},
   handler: async (ctx) => {
+    await requireOperator(ctx);
     const companies = await ctx.db.query('companies').collect();
     const rows = await Promise.all(
       companies.map(async (company) => {
@@ -286,6 +295,7 @@ export const listPipelineCompanies = query({
 export const getReview = query({
   args: { companyId: v.string() },
   handler: async (ctx, { companyId }) => {
+    await requireOperator(ctx);
     const company = await companyByExternalId(ctx, companyId);
     if (company === null) return null;
     const { state, run, draft } = await draftState(ctx, companyId);
@@ -321,6 +331,7 @@ export const getReview = query({
               status: draft.status,
               content: draft.content,
               approvedAt: draft.approvedAt ?? null,
+              acknowledgedClaims: draft.acknowledgedClaims ?? [],
               editedAt: draft.editedAt ?? null,
               updatedAt: draft.updatedAt,
               settingsVersion: draft.settingsVersion,
@@ -350,6 +361,7 @@ export const saveDraftEdits = mutation({
     signature: v.string(),
   },
   handler: async (ctx, { companyId, ...edits }) => {
+    await requireOperator(ctx);
     const draft = await requireDraft(ctx, companyId);
     const content = { ...draft.content, ...edits };
     const issues = validateOutreachContent(content);
@@ -359,23 +371,47 @@ export const saveDraftEdits = mutation({
       content,
       status: 'ready',
       approvedAt: undefined,
+      acknowledgedClaims: undefined,
       editedAt: now,
       updatedAt: now,
     });
   },
 });
 
-/** Mark the reviewed draft as approved for scheduling. Does not send. */
+/** The evidence corpus the draft's claims are checked against. */
+async function draftCorpus(ctx: QueryCtx, draft: Doc<'outreachDrafts'>) {
+  const run = await ctx.db.get(draft.runId);
+  return evidenceCorpus(run?.evidence?.facts ?? [], run?.evidence?.excerpts);
+}
+
+/**
+ * Mark the reviewed draft as approved for scheduling. Does not send. Refuses
+ * structural problems and a missing signature outright; unsupported claims
+ * must each be explicitly acknowledged by the reviewer.
+ */
 export const approveDraft = mutation({
-  args: { companyId: v.string() },
-  handler: async (ctx, { companyId }) => {
+  args: {
+    companyId: v.string(),
+    acknowledgedClaims: v.optional(v.array(v.string())),
+  },
+  handler: async (ctx, { companyId, acknowledgedClaims = [] }) => {
+    await requireOperator(ctx);
     const draft = await requireDraft(ctx, companyId);
-    const issues = validateOutreachContent(draft.content);
-    if (issues.length > 0) throw new Error(issues.join(' '));
+    const check = checkDraftForApproval(
+      draft.content,
+      await draftCorpus(ctx, draft),
+    );
+    if (check.blockers.length > 0) throw new Error(check.blockers.join(' '));
+    if (!claimsAcknowledged(check.claims, acknowledgedClaims)) {
+      throw new Error(
+        `Confirm these claims are accurate, or edit them out, before approving: ${check.claims.join(', ')}`,
+      );
+    }
     const now = new Date().toISOString();
     await ctx.db.patch(draft._id, {
       status: 'approved',
       approvedAt: now,
+      acknowledgedClaims: check.claims,
       updatedAt: now,
     });
   },
@@ -385,10 +421,12 @@ export const approveDraft = mutation({
 export const unapproveDraft = mutation({
   args: { companyId: v.string() },
   handler: async (ctx, { companyId }) => {
+    await requireOperator(ctx);
     const draft = await requireDraft(ctx, companyId);
     await ctx.db.patch(draft._id, {
       status: 'ready',
       approvedAt: undefined,
+      acknowledgedClaims: undefined,
       updatedAt: new Date().toISOString(),
     });
   },

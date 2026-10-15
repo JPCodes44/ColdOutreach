@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   DASHBOARD_DISCLAIMER,
   DASHBOARD_LABEL,
+  checkDraftForApproval,
+  claimsAcknowledged,
+  evidenceCorpus,
+  findDraftClaims,
   displaySource,
   findUnsupportedClaims,
   renderOutreachEmail,
@@ -194,5 +198,70 @@ describe('helpers', () => {
 
   it('sanitizes subjects', () => {
     expect(sanitizeSubject(' a\n\tb  ')).toBe('a b');
+  });
+});
+
+describe('outcome promises', () => {
+  it('flags promised results, even when softened with a modal', () => {
+    expect(
+      findUnsupportedClaims(
+        'An instant reply could enhance customer satisfaction. This will boost your bookings. Results guaranteed.',
+        '',
+      ),
+    ).toEqual([
+      'enhance customer satisfaction',
+      'boost your bookings',
+      'guaranteed',
+    ]);
+    expect(findUnsupportedClaims('You will see more conversions.', '')).toEqual(
+      ['more conversions'],
+    );
+  });
+
+  it('allows the topic when asked as a genuine question', () => {
+    expect(
+      findUnsupportedClaims(
+        'Would a faster reply help bookings, or improve customer satisfaction? I am curious whether it would increase repeat bookings.',
+        '',
+      ),
+    ).toEqual([]);
+  });
+
+  it('does not flag neutral workflow language', () => {
+    expect(
+      findUnsupportedClaims(
+        'Route each inquiry to the right person and send a confirmation email.',
+        '',
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe('approval checks', () => {
+  it('collects claims from every visible field and blocks a missing signature', () => {
+    const content = makeContent({
+      signature: ' ',
+      workflow: [
+        { name: 'Acknowledge', description: 'Boost conversions instantly.' },
+      ],
+    });
+    const check = checkDraftForApproval(content, '');
+    expect(check.claims).toEqual(['Boost conversions']);
+    expect(check.blockers).toEqual([
+      expect.stringMatching(/^Add a signature before approving/),
+    ]);
+    expect(findDraftClaims(makeContent(), '')).toEqual([]);
+  });
+
+  it('requires every flagged claim to be acknowledged', () => {
+    expect(claimsAcknowledged(['a', 'b'], ['b', 'a'])).toBe(true);
+    expect(claimsAcknowledged(['a', 'b'], ['a'])).toBe(false);
+    expect(claimsAcknowledged([], [])).toBe(true);
+  });
+
+  it('builds the evidence corpus from facts and excerpts', () => {
+    expect(evidenceCorpus([{ text: 'one' }], [{ text: 'two' }])).toBe(
+      'one\ntwo',
+    );
   });
 });

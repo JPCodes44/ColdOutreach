@@ -1,4 +1,3 @@
-import { ConvexHttpClient } from 'convex/browser';
 import { makeFunctionReference } from 'convex/server';
 import type { Company, ConfidenceTone } from './types';
 
@@ -28,7 +27,8 @@ interface CompanyResearchResponse {
   total: number;
 }
 
-const researchCompaniesAction = makeFunctionReference<
+/** Called through the app's authenticated Convex client (`useAction`). */
+export const researchCompaniesAction = makeFunctionReference<
   'action',
   CompanyResearchCriteria,
   CompanyResearchResponse
@@ -36,21 +36,6 @@ const researchCompaniesAction = makeFunctionReference<
 
 const defaultCompanyLimit = 50;
 const maxCompanyLimit = 100;
-
-let client: ConvexHttpClient | undefined;
-
-function getConvexUrl() {
-  const url = import.meta.env.VITE_CONVEX_URL;
-  if (typeof url !== 'string' || url.length === 0) {
-    throw new Error('VITE_CONVEX_URL is required for company research.');
-  }
-  return url;
-}
-
-function getClient() {
-  client ??= new ConvexHttpClient(getConvexUrl());
-  return client;
-}
 
 function parseTechStackInput(value: string) {
   return value
@@ -102,10 +87,15 @@ export function buildCompanyResearchCriteria(args: {
   };
 }
 
+export type RunResearch = (
+  criteria: CompanyResearchCriteria,
+) => Promise<CompanyResearchResponse>;
+
 export async function researchCompanies(
+  run: RunResearch,
   criteria: CompanyResearchCriteria,
 ): Promise<{ companies: Company[]; total: number }> {
-  const result = await getClient().action(researchCompaniesAction, criteria);
+  const result = await run(criteria);
   return {
     companies: result.companies.map(toCompany),
     total: result.total,

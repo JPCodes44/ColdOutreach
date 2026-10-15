@@ -6,7 +6,7 @@ import {
   useMemo,
   useState,
 } from 'react';
-import { useMutation } from 'convex/react';
+import { useAction, useMutation } from 'convex/react';
 import { makeFunctionReference } from 'convex/server';
 import {
   companySizeOptions,
@@ -18,6 +18,7 @@ import {
 import {
   buildCompanyResearchCriteria,
   researchCompanies,
+  researchCompaniesAction,
 } from './companyResearchApi';
 import { useSetSelection } from '../shared/useSetSelection';
 import type { Company, FilterChipModel, SelectOption } from './types';
@@ -116,6 +117,7 @@ export function OutreachProvider({ children }: { children: ReactNode }) {
   } = useSetSelection<string>();
   const [importModal, setImportModal] = useState<ImportModalState>(null);
   const importCompanies = useMutation(importCompaniesMutation);
+  const runResearch = useAction(researchCompaniesAction);
 
   const dismissImportModal = useCallback(() => setImportModal(null), []);
 
@@ -279,6 +281,7 @@ export function OutreachProvider({ children }: { children: ReactNode }) {
 
     try {
       const result = await researchCompanies(
+        runResearch,
         buildCompanyResearchCriteria({
           keywords,
           industry,
@@ -308,6 +311,7 @@ export function OutreachProvider({ children }: { children: ReactNode }) {
     city,
     companyLimit,
     clearSelected,
+    runResearch,
   ]);
 
   const value = useMemo(

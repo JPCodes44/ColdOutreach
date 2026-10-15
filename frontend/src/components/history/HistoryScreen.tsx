@@ -1,38 +1,16 @@
 import { useState } from 'react';
-import { useMutation, useQuery } from 'convex/react';
-import { makeFunctionReference } from 'convex/server';
+import { useAction, useMutation, useQuery } from 'convex/react';
 import { QueueTable } from './QueueTable';
 import { SentEmailViewer } from './SentEmailViewer';
 import { SentTable } from './SentTable';
-import type {
-  QueueRow,
-  ResolveOutcome,
-  SentEmailDetail,
-  SentEmailRow,
-} from './types';
-
-type Empty = Record<string, never>;
-const listQueueQuery = makeFunctionReference<'query', Empty, QueueRow[]>(
-  'send:listQueue',
-);
-const listSentQuery = makeFunctionReference<'query', Empty, SentEmailRow[]>(
-  'send:listSentEmails',
-);
-const getSentQuery = makeFunctionReference<
-  'query',
-  { id: string },
-  SentEmailDetail | null
->('send:getSentEmail');
-const cancelMutation = makeFunctionReference<
-  'mutation',
-  { itemId: string },
-  null
->('send:cancelQueueItem');
-const resolveMutation = makeFunctionReference<
-  'mutation',
-  { itemId: string; outcome: ResolveOutcome },
-  null
->('send:resolveUncertainSend');
+import {
+  cancelMutation,
+  checkInboxAction,
+  getSentQuery,
+  listQueueQuery,
+  listSentQuery,
+  resolveMutation,
+} from './api';
 
 /** Queue attempts plus the durable sent-email record. */
 export function HistoryScreen() {
@@ -45,6 +23,7 @@ export function HistoryScreen() {
   );
   const cancel = useMutation(cancelMutation);
   const resolve = useMutation(resolveMutation);
+  const checkInbox = useAction(checkInboxAction);
 
   return (
     <section className="historyScreen">
@@ -64,7 +43,11 @@ export function HistoryScreen() {
           await resolve({ itemId, outcome });
         }}
       />
-      <SentTable rows={sent} onOpen={setOpenId} />
+      <SentTable
+        rows={sent}
+        onOpen={setOpenId}
+        onCheckInbox={() => checkInbox({})}
+      />
       {openId !== null ? (
         <SentEmailViewer email={openEmail} onClose={() => setOpenId(null)} />
       ) : null}

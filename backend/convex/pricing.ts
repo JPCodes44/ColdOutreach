@@ -9,6 +9,8 @@ export const MODEL_PRICING: Record<
   { inputPerM: number; outputPerM: number }
 > = {
   'gpt-4o-mini': { inputPerM: 0.15, outputPerM: 0.6 },
+  // Introductory rate through 2026-12-31; Google lists $1.50 / $7.50 from 2027.
+  'gemini-3.8-flash': { inputPerM: 0.75, outputPerM: 3.75 },
   'gemini-2.5-flash': { inputPerM: 0.3, outputPerM: 2.5 },
   'gemini-2.5-flash-lite': { inputPerM: 0.1, outputPerM: 0.4 },
 };
@@ -38,7 +40,7 @@ export function computeCostUsd(
  */
 export const GEMINI_GROUNDING_EST_USD = 0.05;
 
-/** Gemini free-tier daily request cap for gemini-2.5-flash. */
+/** Gemini free-tier daily request cap used by the navbar counter. */
 export const GEMINI_FREE_DAILY_LIMIT = 20;
 
 /**

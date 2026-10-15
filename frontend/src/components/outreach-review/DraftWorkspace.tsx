@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { findUnsupportedClaims } from '@emailstrat/common';
+import { checkDraftForApproval } from '@emailstrat/common';
 import { DraftEditor } from './DraftEditor';
 import { EmailPreview } from './EmailPreview';
 import { useDraftActions } from './useDraftActions';
@@ -29,14 +29,15 @@ export function DraftWorkspace({
     () => ({ ...draft.content, ...fields }),
     [draft.content, fields],
   );
-  const warnings = useMemo(
-    () =>
-      findUnsupportedClaims(
-        [fields.subject, fields.opening, fields.closing].join('\n'),
-        evidenceText,
-      ),
-    [fields, evidenceText],
+  const check = useMemo(
+    () => checkDraftForApproval(content, evidenceText),
+    [content, evidenceText],
   );
+  const [acknowledged, setAcknowledged] = useState<string[]>([]);
+  const acknowledge = (claim: string, checked: boolean) =>
+    setAcknowledged((current) =>
+      checked ? [...current, claim] : current.filter((item) => item !== claim),
+    );
 
   return (
     <div className="reviewWorkspace">
@@ -47,9 +48,13 @@ export function DraftWorkspace({
         dirty={dirty}
         busy={actions.busy}
         error={actions.error}
-        warnings={warnings}
+        review={{ ...check, acknowledged, onAcknowledge: acknowledge }}
         onSave={() => void actions.save(fields)}
-        onApprove={() => void actions.approve()}
+        onApprove={() =>
+          void actions.approve(
+            check.claims.filter((claim) => acknowledged.includes(claim)),
+          )
+        }
         onUnapprove={() => void actions.unapprove()}
       />
       <EmailPreview content={content} />

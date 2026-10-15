@@ -323,8 +323,19 @@ const UNOBSERVABLE_PROCESS_PATTERNS: RegExp[] = [
   /\bleads?\s+(?:are|get|go)\s+(?:lost|missed|ignored|forgotten)\b/gi,
 ];
 
-/** True when the sentence containing `index` is framed as a question or hypothesis. */
-function isHedged(text: string, index: number): boolean {
+/**
+ * Promised business outcomes ("this will boost bookings", "enhance customer
+ * satisfaction", "guaranteed"). Nothing on a prospect's site can support a
+ * promise about their results, so these may only appear as genuine questions
+ * ("would it help bookings if ...?") — a modal like "could" is not enough.
+ */
+const OUTCOME_PROMISE_PATTERNS: RegExp[] = [
+  /\b(?:increase|increasing|boost|boosting|improve|improving|enhance|enhancing|grow|growing|double|doubling|triple|maximi[sz]e|maximi[sz]ing|drive|driving|skyrocket|lift|lifting|raise|raising)\s+(?:\w+\s+){0,3}?(?:revenue|sales|leads|conversions?|conversion rates?|bookings|appointments|satisfaction|retention|roi|profits?|profitability|growth|customers|clients|engagement|efficiency|loyalty|reviews|close rates?|win rates?)\b/gi,
+  /\bguarantee(?:d|s)?\b/gi,
+  /\b(?:more|higher|better)\s+(?:revenue|sales|conversions?|conversion rates?|bookings|satisfaction|retention|roi|profits?)\b/gi,
+];
+
+function sentenceAt(text: string, index: number): string {
   const start = Math.max(
     text.lastIndexOf('.', index),
     text.lastIndexOf('!', index),
@@ -333,7 +344,12 @@ function isHedged(text: string, index: number): boolean {
   );
   const endMatch = /[.!?\n]/.exec(text.slice(index));
   const end = endMatch === null ? text.length : index + endMatch.index;
-  const sentence = text.slice(start + 1, end + 1);
+  return text.slice(start + 1, end + 1);
+}
+
+/** True when the sentence containing `index` is framed as a question or hypothesis. */
+function isHedged(text: string, index: number): boolean {
+  const sentence = sentenceAt(text, index);
   return (
     sentence.trim().endsWith('?') ||
     /\b(?:whether|if|might|may|could|worth checking|curious|wonder)\b/i.test(
@@ -342,8 +358,17 @@ function isHedged(text: string, index: number): boolean {
   );
 }
 
+/** True when the sentence is an actual question or explicit inquiry. */
+function isGenuineQuestion(text: string, index: number): boolean {
+  const sentence = sentenceAt(text, index);
+  return (
+    sentence.trim().endsWith('?') ||
+    /\b(?:whether|curious|wonder)\b/i.test(sentence)
+  );
+}
+
 /**
- * Specific quantitative, loss, or back-office claims in `text` that the
+ * Specific quantitative, loss, outcome-promise, or back-office claims in `text` that the
  * retrieved website evidence does not support. Static pages cannot establish
  * response times, conversion rates, revenue loss, or internal processes, so
  * figures must appear verbatim on the site, and process claims must be hedged.
@@ -351,12 +376,22 @@ function isHedged(text: string, index: number): boolean {
 export function findUnsupportedClaims(
   text: string,
   evidenceCorpus: string,
+  options: { outcomePromises?: boolean } = {},
 ): string[] {
   const corpus = evidenceCorpus.toLowerCase();
   const found = new Set<string>();
   for (const pattern of UNOBSERVABLE_PROCESS_PATTERNS) {
     for (const match of text.matchAll(pattern)) {
       if (!isHedged(text, match.index ?? 0)) found.add(match[0].trim());
+    }
+  }
+  const outcomePatterns =
+    options.outcomePromises === false ? [] : OUTCOME_PROMISE_PATTERNS;
+  for (const pattern of outcomePatterns) {
+    for (const match of text.matchAll(pattern)) {
+      if (!isGenuineQuestion(text, match.index ?? 0)) {
+        found.add(match[0].trim());
+      }
     }
   }
   for (const pattern of CLAIM_PATTERNS) {
@@ -366,4 +401,73 @@ export function findUnsupportedClaims(
     }
   }
   return [...found];
+}
+
+/** Plain-text corpus of retrieved website evidence (facts + page excerpts). */
+export function evidenceCorpus(
+  facts: { text: string }[],
+  excerpts: { text: string }[] = [],
+): string {
+  return [
+    ...facts.map((fact) => fact.text),
+    ...excerpts.map((excerpt) => excerpt.text),
+  ].join('\n');
+}
+
+/**
+ * Unsupported claims anywhere a reader will see them. Each field is checked
+ * on its own so a hedge in one cannot excuse a claim in another.
+ */
+export function findDraftClaims(
+  content: OutreachEmailContent,
+  corpus: string,
+): string[] {
+  const texts = [
+    content.subject,
+    content.opening,
+    content.closing,
+    ...content.findings.map((finding) => finding.text),
+    ...content.workflow.flatMap((step) => [step.name, step.description]),
+    content.dashboard.title,
+    ...content.dashboard.metrics.flatMap((metric) => [
+      metric.label,
+      metric.description,
+    ]),
+    ...content.dashboard.stages,
+  ];
+  const found = new Set<string>();
+  for (const text of texts) {
+    for (const claim of findUnsupportedClaims(text, corpus)) found.add(claim);
+  }
+  return [...found];
+}
+
+/** Reasons a draft cannot be approved as-is. */
+export interface ApprovalCheck {
+  /** Unsupported claims; approval needs an explicit acknowledgement. */
+  claims: string[];
+  /** Hard blockers that must be fixed before approval. */
+  blockers: string[];
+}
+
+export function checkDraftForApproval(
+  content: OutreachEmailContent,
+  corpus: string,
+): ApprovalCheck {
+  const blockers = validateOutreachContent(content);
+  if (content.signature.trim().length === 0) {
+    blockers.push(
+      'Add a signature before approving (edit it here, or set sender name and signature in Settings for future runs).',
+    );
+  }
+  return { claims: findDraftClaims(content, corpus), blockers };
+}
+
+/** True when every flagged claim is in the reviewer's acknowledged list. */
+export function claimsAcknowledged(
+  claims: string[],
+  acknowledged: string[],
+): boolean {
+  const ok = new Set(acknowledged);
+  return claims.every((claim) => ok.has(claim));
 }

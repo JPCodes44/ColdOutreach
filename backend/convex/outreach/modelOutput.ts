@@ -1,7 +1,7 @@
 // Validation of model output against retrieved evidence. Anything malformed
 // or unsupported is dropped or rejected; nothing here invents content.
 
-import { findUnsupportedClaims } from '@emailstrat/common';
+import { evidenceCorpus, findUnsupportedClaims } from '@emailstrat/common';
 import type { EvidenceFact } from './websiteEvidence';
 
 /** A pipeline failure whose message is safe to show the user. */
@@ -90,15 +90,7 @@ export function parseModelJson(
 }
 
 /** Plain-text corpus of everything retrieved, for claim verification. */
-export function evidenceCorpus(
-  facts: EvidenceFact[],
-  excerpts: { text: string }[],
-): string {
-  return [
-    ...facts.map((fact) => fact.text),
-    ...excerpts.map((excerpt) => excerpt.text),
-  ].join('\n');
-}
+export { evidenceCorpus };
 
 function validIds(value: unknown, known: Set<string>): string[] {
   return [
@@ -123,7 +115,13 @@ export function validateAnalysis(
   let dropped = 0;
   // Check each field on its own so a hedge in one cannot mask a claim in another.
   const supported = (...texts: string[]) =>
-    texts.every((text) => findUnsupportedClaims(text, corpus).length === 0);
+    // Hypotheses are labeled as such on the review screen and never sent
+    // verbatim, so only the email itself is held to the outcome-promise rule.
+    texts.every(
+      (text) =>
+        findUnsupportedClaims(text, corpus, { outcomePromises: false })
+          .length === 0,
+    );
 
   const observations: ValidatedObservation[] = [];
   for (const item of arr(raw.observations)) {

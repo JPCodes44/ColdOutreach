@@ -292,3 +292,24 @@
     Menlo,
     monospace;
 }
+
+.historyChip-replied {
+  background: #dbe1ff;
+  color: #003ea8;
+}
+
+.historyInboxCheck {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.historyInboxResult {
+  font:
+    400 13px/18px Inter,
+    system-ui,
+    -apple-system,
+    sans-serif;
+  color: #434655;
+}

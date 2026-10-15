@@ -26,6 +26,7 @@ export function EvidencePanel({ evidence, analysis }: EvidencePanelProps) {
             <span className="reviewMuted">
               {' '}
               · retrieved {formatTime(source.fetchedAt)}
+              {source.rendered === true ? ' · rendered in a browser' : ''}
             </span>
           </li>
         ))}

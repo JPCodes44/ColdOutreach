@@ -10,7 +10,8 @@ bindings), and `frontend/` (React/Vite). The Convex project is
 The app is a business-outreach pipeline (website review -> evidence-backed
 email -> review/approve -> Gmail). Runtime-agnostic pipeline logic lives in
 `backend/convex/outreach/` with injected I/O; Convex function modules
-(`outreachRuns`, `outreachPipeline`, `send`, `sendActions`, `settings`) stay thin.
+(`outreachRuns`, `outreachPipeline`, `send`, `sendActions`, `settings`,
+`operator`/`auth`, `delivery`/`mailbox`) stay thin.
 Backend tests live in `backend/tests/` (pure modules plus `convex-test`).
 Website content is untrusted model input; generation must never send email.
 Keep credentials in Convex's server environment. Local `.env.local` files and
@@ -37,7 +38,7 @@ full Git history and staged files for secrets, and inspect the browser bundle.
 
 Match the language and framework conventions introduced by the first implementation. Use descriptive names for workflow steps, agents, and integrations. Prefer names that explain intent, for example `collectWebsiteEvidence`, `runOutreachPipeline`, or `dispatchQueueItem`.
 
-Keep configuration explicit and avoid hidden global state. Use environment variables for secrets and document required names in `README.md`; never commit real credentials.
+Keep configuration explicit and avoid hidden global state. Use environment variables for secrets and document required names in `README.md`; never commit real credentials. Every new public Convex query/mutation must call `requireOperator(ctx)` (actions: `requireOperatorAction(ctx)`) from `backend/convex/operator.ts` and be added to the list in `backend/tests/operator-access.test.ts`; the frontend must reach Convex only through the authenticated React client.
 
 ## Testing Guidelines
 

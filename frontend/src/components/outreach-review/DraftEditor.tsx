@@ -1,3 +1,5 @@
+import { ClaimReview } from './ClaimReview';
+import { DraftActions } from './DraftActions';
 import type { DraftEditorProps, EditableFields } from './types';
 
 const AREAS: {
@@ -22,11 +24,14 @@ export function DraftEditor({
   dirty,
   busy,
   error,
-  warnings,
+  review,
   onSave,
   onApprove,
   onUnapprove,
 }: DraftEditorProps) {
+  const ready =
+    review.blockers.length === 0 &&
+    review.claims.every((claim) => review.acknowledged.includes(claim));
   return (
     <section className="reviewCard reviewEditor" aria-label="Edit email">
       <h2 className="reviewCardTitle">
@@ -60,47 +65,21 @@ export function DraftEditor({
           />
         </label>
       ))}
-      {warnings.length > 0 ? (
-        <p className="reviewBanner reviewBanner-warning" role="note">
-          Not found in the extracted website evidence, so check before sending:{' '}
-          {warnings.join(', ')}
-        </p>
-      ) : null}
+      <ClaimReview {...review} />
       {error !== null ? (
         <p className="reviewBanner reviewBanner-error" role="alert">
           {error}
         </p>
       ) : null}
-      <div className="reviewEditorActions">
-        <button
-          type="button"
-          className="reviewSecondaryButton"
-          onClick={onSave}
-          disabled={!dirty || busy}
-        >
-          Save edits
-        </button>
-        {approved ? (
-          <button
-            type="button"
-            className="reviewSecondaryButton"
-            onClick={onUnapprove}
-            disabled={busy}
-          >
-            Withdraw approval
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="reviewPrimaryButton"
-            onClick={onApprove}
-            disabled={dirty || busy}
-            title={dirty ? 'Save edits before approving' : undefined}
-          >
-            Approve for sending
-          </button>
-        )}
-      </div>
+      <DraftActions
+        approved={approved}
+        dirty={dirty}
+        busy={busy}
+        ready={ready}
+        onSave={onSave}
+        onApprove={onApprove}
+        onUnapprove={onUnapprove}
+      />
       <p className="reviewMuted">
         Approving does not send. Use Schedule to send.
       </p>

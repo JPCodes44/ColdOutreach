@@ -36,8 +36,11 @@ export function useDraftActions(companyId: string) {
         () => saveEdits({ companyId, ...fields }),
         'Could not save edits.',
       ),
-    approve: () =>
-      perform(() => approve({ companyId }), 'Could not approve the draft.'),
+    approve: (acknowledgedClaims: string[]) =>
+      perform(
+        () => approve({ companyId, acknowledgedClaims }),
+        'Could not approve the draft.',
+      ),
     unapprove: () =>
       perform(() => unapprove({ companyId }), 'Could not withdraw approval.'),
   };

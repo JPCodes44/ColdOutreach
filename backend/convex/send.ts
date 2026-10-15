@@ -8,6 +8,7 @@ import {
   type MutationCtx,
   type QueryCtx,
 } from './_generated/server';
+import { requireOperator } from './operator';
 import {
   escapeHtml,
   nonEmptyStrings,
@@ -65,6 +66,7 @@ function isReservation(row: Doc<'sendQueue'>): boolean {
 export const getScheduleSummary = query({
   args: { companyIds: v.array(v.string()) },
   handler: async (ctx, { companyIds }) => {
+    await requireOperator(ctx);
     const entities = [];
     let approvedDrafts = 0;
     let totalEmailsQueued = 0;
@@ -279,6 +281,7 @@ export const enqueueSend = mutation({
   },
   returns: v.object({ batchId: v.string(), queued: v.number() }),
   handler: async (ctx, { companyIds, scheduledAtMs, method }) => {
+    await requireOperator(ctx);
     const now = Date.now();
     if (
       !Number.isFinite(scheduledAtMs) ||
@@ -489,6 +492,7 @@ export const resolveUncertainSend = mutation({
     outcome: v.union(v.literal('sent'), v.literal('not-sent')),
   },
   handler: async (ctx, { itemId, outcome }) => {
+    await requireOperator(ctx);
     const item = await ctx.db.get(itemId);
     if (
       item === null ||
@@ -531,6 +535,7 @@ export const cancelScheduledSends = mutation({
   args: { companyIds: v.array(v.string()) },
   returns: v.object({ canceled: v.number() }),
   handler: async (ctx, { companyIds }) => {
+    await requireOperator(ctx);
     let canceled = 0;
     for (const companyId of new Set(companyIds)) {
       for (const row of await queueRowsForCompany(ctx, companyId)) {
@@ -546,6 +551,7 @@ export const cancelScheduledSends = mutation({
 export const cancelQueueItem = mutation({
   args: { itemId: v.id('sendQueue') },
   handler: async (ctx, { itemId }) => {
+    await requireOperator(ctx);
     const row = await ctx.db.get(itemId);
     if (row === null || !(await cancelRow(ctx, row))) {
       throw new Error('Only queued sends can be canceled.');
@@ -560,6 +566,7 @@ export const cancelQueueItem = mutation({
 export const listQueue = query({
   args: {},
   handler: async (ctx) => {
+    await requireOperator(ctx);
     const now = Date.now();
     const rows = await ctx.db.query('sendQueue').order('desc').take(300);
     return rows.map((row) => ({
@@ -583,6 +590,7 @@ export const listQueue = query({
 export const listSentEmails = query({
   args: {},
   handler: async (ctx) => {
+    await requireOperator(ctx);
     const rows = await ctx.db
       .query('sentEmails')
       .withIndex('by_sentAt')
@@ -600,6 +608,9 @@ export const listSentEmails = query({
       acceptance: row.acceptance,
       providerMessageId: row.providerMessageId ?? null,
       isTest: row.isTest,
+      bouncedAt: row.bouncedAt ?? null,
+      bounceDetail: row.bounceDetail ?? null,
+      repliedAt: row.repliedAt ?? null,
     }));
   },
 });
@@ -607,7 +618,10 @@ export const listSentEmails = query({
 /** Full stored content of one sent email. */
 export const getSentEmail = query({
   args: { id: v.id('sentEmails') },
-  handler: async (ctx, { id }) => ctx.db.get(id),
+  handler: async (ctx, { id }) => {
+    await requireOperator(ctx);
+    return ctx.db.get(id);
+  },
 });
 
 /* ------------------------------------------------- status and ledgers */
@@ -734,6 +748,7 @@ export const purgeSettledCompanies = mutation({
   args: { companyIds: v.array(v.string()) },
   returns: v.object({ removed: v.number() }),
   handler: async (ctx, { companyIds }) => {
+    await requireOperator(ctx);
     let removed = 0;
     for (const companyId of new Set(companyIds)) {
       const rows = await queueRowsForCompany(ctx, companyId);
@@ -762,3 +777,35 @@ export const purgeSettledCompanies = mutation({
 export async function hasActiveSends(ctx: QueryCtx, companyId: string) {
   return (await queueRowsForCompany(ctx, companyId)).some(isReservation);
 }
+
+/**
+ * Operator cleanup for History: delete self-test records and finished
+ * (canceled or failed) queue rows that were only ever tests. Never touches
+ * real sent emails or the contact ledgers. Run from the CLI:
+ * `bunx convex run send:purgeTestHistory`.
+ */
+export const purgeTestHistory = internalMutation({
+  args: { canceledRecipients: v.optional(v.array(v.string())) },
+  returns: v.object({ queueRows: v.number(), sentEmails: v.number() }),
+  handler: async (ctx, { canceledRecipients = [] }) => {
+    const extra = new Set(canceledRecipients.map((to) => to.toLowerCase()));
+    let queueRows = 0;
+    let sentEmails = 0;
+    for (const row of await ctx.db.query('sentEmails').collect()) {
+      if (!row.isTest) continue;
+      await ctx.db.delete(row._id);
+      sentEmails += 1;
+    }
+    for (const row of await ctx.db.query('sendQueue').collect()) {
+      const finishedTest =
+        row.isTest === true &&
+        ['sent', 'failed', 'canceled'].includes(row.status);
+      const canceledPlaceholder =
+        row.status === 'canceled' && extra.has(row.to.toLowerCase());
+      if (!finishedTest && !canceledPlaceholder) continue;
+      await ctx.db.delete(row._id);
+      queueRows += 1;
+    }
+    return { queueRows, sentEmails };
+  },
+});
