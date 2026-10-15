@@ -22,6 +22,8 @@ export interface PipelineCompanyRow {
   name: string;
   domain: string;
   industry: string;
+  /** Industry-preset label, e.g. "Mixed manufacturer". */
+  segment: string | null;
   confidence: number;
   draftState: DraftState;
   stage: RunStage | null;

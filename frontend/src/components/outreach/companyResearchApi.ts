@@ -20,6 +20,7 @@ interface CompanyResearchResult {
   size: string;
   techStack: string[];
   confidence: number;
+  segment?: string;
 }
 
 interface CompanyResearchResponse {
@@ -66,6 +67,7 @@ function toCompany(result: CompanyResearchResult): Company {
     techStack: result.techStack,
     confidence: result.confidence,
     confidenceTone,
+    ...(result.segment !== undefined ? { segment: result.segment } : {}),
   };
 }
 

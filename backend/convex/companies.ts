@@ -13,6 +13,7 @@ import { computeCostUsd, GEMINI_GROUNDING_EST_USD } from './pricing';
 import { runGeminiWithFallback } from './gemini';
 import { COMPANY_RESEARCH_SYSTEM_PROMPT } from './prompts/company_research_system';
 import { deletePipelineState } from './outreachRuns';
+import { industryScope, segmentRank } from './outreach/industryScopes';
 import { deleteLegacyArtifacts, hasActiveSends } from './send';
 import {
   normalizeCompanyDomain,
@@ -42,6 +43,8 @@ interface CompanyResearchCandidate {
   size?: string;
   techStack?: string[];
   confidence?: number;
+  manufacturingRole?: unknown;
+  plantBasedFocus?: unknown;
 }
 
 interface CompanyResearchResult {
@@ -53,6 +56,8 @@ interface CompanyResearchResult {
   size: string;
   techStack: string[];
   confidence: number;
+  /** Preset-specific label, e.g. "Exclusively vegan" / "Mixed manufacturer". */
+  segment?: string;
 }
 
 interface CompanyResearchResponse {
@@ -85,6 +90,24 @@ function normalizeCompany(
         ? Math.min(Math.max(company.confidence, 0), 100)
         : 0,
   };
+}
+
+/**
+ * Apply an industry preset: drop out-of-scope candidates (e.g. retailers for
+ * a manufacturers-only scope) and label the rest.
+ */
+export function classifyCandidates(
+  industry: string,
+  candidates: CompanyResearchCandidate[],
+): CompanyResearchResult[] {
+  const preset = industryScope(industry);
+  if (preset === undefined) return candidates.map(normalizeCompany);
+  const kept: CompanyResearchResult[] = [];
+  for (const candidate of candidates) {
+    const { keep, segment } = preset.classify(candidate);
+    if (keep) kept.push({ ...normalizeCompany(candidate), segment });
+  }
+  return kept;
 }
 
 async function filterPreviouslyEmailed(
@@ -122,8 +145,13 @@ function parseResearchResponse(
 }
 
 /** Build the grounded research request payload sent to Gemini. */
-function buildResearchContents(args: ResearchPromptArgs): string {
-  const { excludedCompanyDomains, outreachTarget, ...researchCriteria } = args;
+export function buildResearchContents(args: ResearchPromptArgs): string {
+  const { excludedCompanyDomains, outreachTarget, ...criteria } = args;
+  const preset = industryScope(criteria.industry);
+  const researchCriteria = preset
+    ? { ...criteria, industry: preset.label, scope: preset.scope }
+    : criteria;
+  const extraFields = preset?.responseFields ?? {};
   return JSON.stringify({
     role: 'company_research_request',
     instruction: COMPANY_RESEARCH_SYSTEM_PROMPT,
@@ -141,18 +169,22 @@ function buildResearchContents(args: ResearchPromptArgs): string {
           size: 'string',
           techStack: ['string'],
           confidence: 'number from 0 to 100',
+          ...extraFields,
         },
       ],
     },
     outputRequirements: {
       includeFields: [
-        'name',
-        'domain',
-        'industry',
-        'location',
-        'size',
-        'techStack',
-        'confidence',
+        ...new Set([
+          'name',
+          'domain',
+          'industry',
+          'location',
+          'size',
+          'techStack',
+          'confidence',
+          ...Object.keys(extraFields),
+        ]),
       ],
     },
   });
@@ -231,13 +263,15 @@ export const research = action({
       console.error('Gemini usage tracking failed:', trackErr);
     }
 
-    const candidates = parseResearchResponse(result.text)
-      .slice(0, discoveryLimit)
-      .map(normalizeCompany);
-    const companies = (await filterPreviouslyEmailed(ctx, candidates)).slice(
-      0,
-      requestedLimit,
+    const candidates = classifyCandidates(
+      args.industry,
+      parseResearchResponse(result.text).slice(0, discoveryLimit),
     );
+    // Limit first, then group by segment for display, so sorting never
+    // pushes one segment (e.g. mixed manufacturers) out of the results.
+    const companies = (await filterPreviouslyEmailed(ctx, candidates))
+      .slice(0, requestedLimit)
+      .sort((a, b) => segmentRank(a.segment) - segmentRank(b.segment));
 
     return { companies, total: companies.length };
   },
@@ -252,6 +286,7 @@ export const research = action({
         size: v.string(),
         techStack: v.array(v.string()),
         confidence: v.number(),
+        segment: v.optional(v.string()),
       }),
     ),
     total: v.number(),
@@ -299,6 +334,7 @@ const companyInput = v.object({
   techStack: v.array(v.string()),
   confidence: v.number(),
   confidenceTone: v.union(v.literal('positive'), v.literal('neutral')),
+  segment: v.optional(v.string()),
 });
 
 /**

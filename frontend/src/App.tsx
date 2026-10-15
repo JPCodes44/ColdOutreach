@@ -12,6 +12,7 @@ import './components/settings/styles.css';
 import './components/modals/styles.css';
 import './components/account/styles.css';
 import './components/auth/styles.css';
+import './components/shared/styles.css';
 import { AuthGate } from './components/auth/AuthGate';
 import { Workspace } from './components/shell/Workspace';
 

@@ -167,6 +167,7 @@ export function OutreachProvider({ children }: { children: ReactNode }) {
         techStack: c.techStack,
         confidence: c.confidence,
         confidenceTone: c.confidenceTone,
+        ...(c.segment !== undefined ? { segment: c.segment } : {}),
       })),
     });
 

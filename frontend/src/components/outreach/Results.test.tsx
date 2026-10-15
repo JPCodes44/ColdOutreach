@@ -60,6 +60,19 @@ function renderRow(selected: boolean, onToggle = vi.fn()) {
 }
 
 describe('ResultsRow', () => {
+  it('flags exclusively vegan manufacturers', () => {
+    render(
+      <ResultsRow
+        company={{ ...companies[0]!, segment: 'Exclusively vegan' }}
+        selected={false}
+        onToggle={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('Exclusively vegan')).toHaveClass(
+      'segmentBadge-vegan',
+    );
+  });
+
   it('reflects selection state in its checkbox', () => {
     renderRow(true);
     expect(screen.getByRole('checkbox')).toBeChecked();

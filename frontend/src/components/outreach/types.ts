@@ -30,6 +30,8 @@ export interface Company {
   /** Confidence percentage, 0–100. */
   confidence: number;
   confidenceTone: ConfidenceTone;
+  /** Industry-preset label, e.g. "Exclusively vegan" / "Mixed manufacturer". */
+  segment?: string;
 }
 
 /** An option in a filter `<select>`. */

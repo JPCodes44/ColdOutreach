@@ -35,6 +35,15 @@ The workspace package names remain `@emailstrat/*` for import compatibility.
    emails never change. Credentials are never entered or shown here.
 2. **Companies** — discover companies (Gemini with Google Search grounding,
    steered by your saved niche/offer) and import them into the pipeline.
+   The **Plant-Based Food & Ingredient Manufacturers** industry preset sends a
+   precise scope (manufacturers, processors, co-, contract and private-label
+   manufacturers of plant-based foods and ingredients, including products not
+   branded vegan), drops results Gemini classifies as retailers, distributors
+   or brand-only marketers, and labels each company **Exclusively vegan**,
+   **Mixed manufacturer**, or **Vegan focus unclear** (shown in Companies and
+   Pipeline). These labels are Gemini's judgement from public information;
+   confirm them on the company's site. Presets live in
+   `backend/convex/outreach/industryScopes.ts`.
 3. **Pipeline** — select one or more companies (up to 10 at a time) and run the
    pipeline. It retrieves the company's homepage and up to three relevant
    same-site pages (contact, booking, quote, services), extracts contact methods,

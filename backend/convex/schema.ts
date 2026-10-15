@@ -128,6 +128,8 @@ export default defineSchema({
     techStack: v.array(v.string()),
     confidence: v.number(),
     confidenceTone: v.union(v.literal('positive'), v.literal('neutral')),
+    /** Industry-preset label, e.g. "Exclusively vegan" / "Mixed manufacturer". */
+    segment: v.optional(v.string()),
     /** Up to three manually-entered recipient emails for the outreach. */
     email1: v.optional(v.string()),
     email2: v.optional(v.string()),

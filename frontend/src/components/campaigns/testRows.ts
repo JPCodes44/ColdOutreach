@@ -9,6 +9,7 @@ export function pipelineRow(
     name: 'Acme Plumbing',
     domain: 'acme.test',
     industry: 'Home services',
+    segment: null,
     confidence: 85,
     draftState: 'none',
     stage: null,

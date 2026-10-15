@@ -274,6 +274,7 @@ export const listPipelineCompanies = query({
           name: company.name,
           domain: company.domain,
           industry: company.industry,
+          segment: company.segment ?? null,
           confidence: company.confidence,
           draftState: state,
           stage: run?.status === 'running' ? run.stage : null,

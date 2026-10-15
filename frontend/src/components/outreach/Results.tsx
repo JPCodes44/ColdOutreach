@@ -1,4 +1,5 @@
 import { Button, Icon, SplitButton } from './Common';
+import { SegmentBadge } from '../shared/SegmentBadge';
 import type {
   BulkFooterProps,
   CompanyAvatarProps,
@@ -72,7 +73,10 @@ export function ResultsRow({ company, selected, onToggle }: ResultsRowProps) {
         <CompanyCell company={company} />
       </div>
       <div role="cell" className="outreachTableCell outreachColStandard">
-        {company.industry}
+        <span className="segmentStack">
+          {company.industry}
+          <SegmentBadge segment={company.segment} />
+        </span>
       </div>
       <div role="cell" className="outreachTableCell outreachColStandard">
         {company.location}

@@ -51,4 +51,20 @@ describe('CampaignRow', () => {
     );
     expect(screen.getByRole('row')).toHaveAttribute('aria-busy', 'true');
   });
+
+  it('shows the manufacturer segment under the industry', () => {
+    render(
+      <CampaignRow
+        company={{
+          ...pipelineRow({ segment: 'Mixed manufacturer' }),
+          selected: false,
+        }}
+        onOpenReview={vi.fn()}
+        onToggleSelected={vi.fn()}
+      />,
+    );
+    expect(screen.getByText('Mixed manufacturer')).toHaveClass(
+      'segmentBadge-mixed',
+    );
+  });
 });

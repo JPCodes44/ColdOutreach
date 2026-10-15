@@ -17,6 +17,10 @@ export const industryOptions: SelectOption[] = [
   { value: 'software', label: 'Software Development' },
   { value: 'finance', label: 'Financial Services' },
   { value: 'healthcare', label: 'Healthcare' },
+  {
+    value: 'plant-based-manufacturing',
+    label: 'Plant-Based Food & Ingredient Manufacturers',
+  },
 ];
 
 export const companySizeOptions: SelectOption[] = [
