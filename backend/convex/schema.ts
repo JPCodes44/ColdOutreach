@@ -27,6 +27,8 @@ export const settingsSnapshotValidator = v.object({
 });
 
 export const evidenceValidator = v.object({
+  /** Saved discovery context; separate from retrieved website facts. */
+  researchContext: v.optional(v.string()),
   sources: v.array(
     v.object({
       url: v.string(),
@@ -123,12 +125,13 @@ export default defineSchema({
     domain: v.string(),
     initial: v.string(),
     industry: v.string(),
+    description: v.optional(v.string()),
     location: v.string(),
     size: v.string(),
     techStack: v.array(v.string()),
     confidence: v.number(),
     confidenceTone: v.union(v.literal('positive'), v.literal('neutral')),
-    /** Industry-preset label, e.g. "Exclusively vegan" / "Mixed manufacturer". */
+    /** Legacy classification; no longer used for discovery display or drafting. */
     segment: v.optional(v.string()),
     /** Up to three manually-entered recipient emails for the outreach. */
     email1: v.optional(v.string()),
@@ -169,6 +172,8 @@ export default defineSchema({
       v.literal('failed'),
     ),
     stage: runStageValidator,
+    /** Absent on older runs, which always reviewed the website. */
+    websiteReviewEnabled: v.optional(v.boolean()),
     settings: settingsSnapshotValidator,
     startedAt: v.number(),
     finishedAt: v.optional(v.number()),

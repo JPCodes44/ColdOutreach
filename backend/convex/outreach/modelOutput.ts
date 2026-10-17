@@ -164,6 +164,26 @@ export function validateAnalysis(
     );
   }
 
+  const { proposedWorkflow, dashboard } = validateConcepts(raw, corpus);
+
+  return {
+    businessSummary: str(raw.businessSummary, 400),
+    observations: observations.slice(0, 5),
+    opportunities: opportunities.slice(0, 3),
+    proposedWorkflow,
+    dashboard,
+    droppedCount: dropped,
+  };
+}
+
+/** Validate illustrative workflow/dashboard content for either drafting mode. */
+export function validateConcepts(raw: Json, corpus: string) {
+  const supported = (...texts: string[]) =>
+    texts.every(
+      (text) =>
+        findUnsupportedClaims(text, corpus, { outcomePromises: false })
+          .length === 0,
+    );
   const proposedWorkflow = arr(raw.proposedWorkflow)
     .filter(isObject)
     .map((step) => ({
@@ -203,16 +223,12 @@ export function validateAnalysis(
   }
 
   return {
-    businessSummary: str(raw.businessSummary, 400),
-    observations: observations.slice(0, 5),
-    opportunities: opportunities.slice(0, 3),
     proposedWorkflow,
     dashboard: {
       title: str(dashboardRaw.title, 80) || 'Lead response overview',
       metrics,
       stages,
     },
-    droppedCount: dropped,
   };
 }
 
@@ -220,6 +236,7 @@ export function validateAnalysis(
 export function validateComposition(
   raw: Json,
   corpus: string,
+  options: { includeDashboardIntro?: boolean } = {},
 ): { composition: ValidatedComposition; unsupportedClaims: string[] } {
   const composition: ValidatedComposition = {
     subject: str(raw.subject, 120),
@@ -227,11 +244,18 @@ export function validateComposition(
     observationParagraph: str(raw.observationParagraph, 800),
     opportunityParagraph: str(raw.opportunityParagraph, 800),
     solutionParagraph: str(raw.solutionParagraph, 800),
-    dashboardIntro: str(raw.dashboardIntro, 300),
+    dashboardIntro:
+      options.includeDashboardIntro === false
+        ? ''
+        : str(raw.dashboardIntro, 300),
     question: str(raw.question, 300),
   };
   const missing = Object.entries(composition)
-    .filter(([, value]) => value.length === 0)
+    .filter(
+      ([key, value]) =>
+        value.length === 0 &&
+        !(key === 'dashboardIntro' && options.includeDashboardIntro === false),
+    )
     .map(([key]) => key);
   if (missing.length > 0) {
     throw new PipelineError(

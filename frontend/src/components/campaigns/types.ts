@@ -22,10 +22,13 @@ export interface PipelineCompanyRow {
   name: string;
   domain: string;
   industry: string;
+  description?: string | null;
   /** Industry-preset label, e.g. "Mixed manufacturer". */
   segment: string | null;
   confidence: number;
   draftState: DraftState;
+  /** Mode of the displayed draft/run; null before any pipeline run. */
+  websiteReviewEnabled: boolean | null;
   stage: RunStage | null;
   lastError: string | null;
   subject: string;
@@ -53,6 +56,8 @@ export interface CampaignHeaderProps {
   onStatusFilterChange: (value: PipelineFilter) => void;
   selectedCount: number;
   running: boolean;
+  websiteReviewEnabled: boolean;
+  onWebsiteReviewChange: (enabled: boolean) => void;
   onRun: () => void;
   onDelete: () => void;
 }

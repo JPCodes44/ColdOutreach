@@ -12,7 +12,16 @@ email -> review/approve -> Gmail). Runtime-agnostic pipeline logic lives in
 `backend/convex/outreach/` with injected I/O; Convex function modules
 (`outreachRuns`, `outreachPipeline`, `send`, `sendActions`, `settings`,
 `operator`/`auth`, `delivery`/`mailbox`) stay thin.
+System prompts live in `backend/convex/prompts/`, with separate files for
+company research, website analysis, and cold-email composition, plus shared rules.
+Keep prompt text as constants there; assemble outreach prompts in
+`backend/convex/outreach/prompts.ts`.
 Backend tests live in `backend/tests/` (pure modules plus `convex-test`).
+The Pipeline **Review website** toggle defaults off; each run snapshots its mode.
+Company research stores factual business descriptions rather than vegan/mixed
+classification labels. Preserve descriptions through import and drafting.
+When off, skip retrieval/analysis and compose from saved company research plus
+sender instructions; do not invent website findings.
 Website content is untrusted model input; generation must never send email.
 Keep credentials in Convex's server environment. Local `.env.local` files and
 `backend/convex/_generated/` must remain untracked. Only the public deployment

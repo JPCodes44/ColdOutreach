@@ -52,19 +52,23 @@ describe('CampaignRow', () => {
     expect(screen.getByRole('row')).toHaveAttribute('aria-busy', 'true');
   });
 
-  it('shows the manufacturer segment under the industry', () => {
+  it('shows the researched business description without a classification label', () => {
     render(
       <CampaignRow
         company={{
-          ...pipelineRow({ segment: 'Mixed manufacturer' }),
+          ...pipelineRow({
+            segment: 'Mixed manufacturer',
+            description: 'Produces private-label sauces.',
+          }),
           selected: false,
         }}
         onOpenReview={vi.fn()}
         onToggleSelected={vi.fn()}
       />,
     );
-    expect(screen.getByText('Mixed manufacturer')).toHaveClass(
-      'segmentBadge-mixed',
-    );
+    expect(screen.queryByText('Mixed manufacturer')).toBeNull();
+    expect(
+      screen.getByText('Produces private-label sauces.'),
+    ).toBeInTheDocument();
   });
 });

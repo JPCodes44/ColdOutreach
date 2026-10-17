@@ -560,6 +560,19 @@ snapped to the nearest 5% by CampaignScore. */
   min-width: 0;
 }
 
+.campaignModeLabel {
+  border: 1px solid #c3c6d7;
+  border-radius: 4px;
+  padding: 1px 6px;
+  background: #f0f2f7;
+  color: #434655;
+  font:
+    500 11px/16px Inter,
+    system-ui,
+    sans-serif;
+  white-space: nowrap;
+}
+
 .campaignStatusError {
   max-width: 180px;
   overflow: hidden;
@@ -598,4 +611,63 @@ snapped to the nearest 5% by CampaignScore. */
   background: none;
   color: #434655;
   cursor: pointer;
+}
+
+.campaignWebsiteToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #434655;
+  font:
+    500 13px/18px Inter,
+    system-ui,
+    sans-serif;
+  cursor: pointer;
+}
+
+.campaignWebsiteToggle input {
+  width: 32px;
+  height: 18px;
+  appearance: none;
+  border: 1px solid #737686;
+  border-radius: 999px;
+  background: #e1e2e8;
+  cursor: pointer;
+  position: relative;
+}
+
+.campaignWebsiteToggle input::after {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  top: 2px;
+  left: 2px;
+  border-radius: 50%;
+  background: #434655;
+}
+
+.campaignWebsiteToggle input:checked {
+  background: #004ac6;
+  border-color: #004ac6;
+}
+
+.campaignWebsiteToggle input:checked::after {
+  left: 16px;
+  background: #fff;
+}
+
+.campaignWebsiteToggle input:focus-visible {
+  outline: 2px solid #004ac6;
+  outline-offset: 3px;
+}
+
+.campaignWebsiteToggle input:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.campaignResearchDescription {
+  font-size: 11px;
+  line-height: 16px;
 }

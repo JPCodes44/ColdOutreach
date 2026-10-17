@@ -17,6 +17,7 @@ export interface EvidenceFact {
 }
 
 export interface ReviewEvidence {
+  researchContext?: string;
   sources: EvidenceSource[];
   facts: EvidenceFact[];
   skipped: { url: string; reason: string }[];
@@ -49,6 +50,7 @@ export interface ReviewRun {
   startedAt: number;
   finishedAt: number | null;
   settingsVersion: number;
+  websiteReviewEnabled?: boolean;
 }
 
 export interface ReviewDraft {
@@ -61,6 +63,7 @@ export interface ReviewDraft {
   editedAt: string | null;
   updatedAt: string;
   settingsVersion: number;
+  websiteReviewEnabled?: boolean;
 }
 
 /** Shape returned by `outreachRuns:getReview`. */
@@ -109,6 +112,7 @@ export interface ReviewHeaderProps {
 
 export interface RunProgressProps {
   stage: RunStage;
+  websiteReviewEnabled?: boolean;
 }
 
 export interface RunErrorProps {

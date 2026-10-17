@@ -18,11 +18,17 @@ import type {
 export function CampaignsScreen({ onOpenReview }: CampaignsScreenProps) {
   const rows = useQuery(listPipelineCompaniesQuery, {});
   const [query, setQuery] = useState('');
+  const [websiteReviewEnabled, setWebsiteReviewEnabled] = useState(false);
   const [filter, setFilter] = useState<PipelineFilter>('all');
   const { selectedIds, clearSelected, toggleSelected, toggleAll } =
     useSetSelection<string>();
   const nameOf = (id: string) => rows?.find((row) => row.id === id)?.name ?? id;
-  const actions = usePipelineActions(selectedIds, clearSelected, nameOf);
+  const actions = usePipelineActions(
+    selectedIds,
+    clearSelected,
+    nameOf,
+    websiteReviewEnabled,
+  );
 
   const companies: CampaignCompany[] = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -45,6 +51,8 @@ export function CampaignsScreen({ onOpenReview }: CampaignsScreenProps) {
         onStatusFilterChange={setFilter}
         selectedCount={selectedIds.size}
         running={actions.running}
+        websiteReviewEnabled={websiteReviewEnabled}
+        onWebsiteReviewChange={setWebsiteReviewEnabled}
         onRun={() => void actions.run()}
         onDelete={actions.requestDelete}
       />

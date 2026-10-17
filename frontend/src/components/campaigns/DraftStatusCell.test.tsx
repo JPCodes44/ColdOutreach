@@ -4,6 +4,30 @@ import { DraftStatusCell } from './DraftStatusCell';
 import { pipelineRow } from './testRows';
 
 describe('DraftStatusCell', () => {
+  it.each([
+    [true, 'Website review'],
+    [false, 'Company research only'],
+  ] as const)(
+    'labels the draft mode when website review is %s',
+    (websiteReviewEnabled, label) => {
+      render(
+        <DraftStatusCell
+          company={pipelineRow({ draftState: 'ready', websiteReviewEnabled })}
+        />,
+      );
+      expect(screen.getByText('Ready for review')).toBeInTheDocument();
+      expect(screen.getByText(label)).toBeInTheDocument();
+    },
+  );
+
+  it('does not assign a mode before a company has run', () => {
+    render(
+      <DraftStatusCell company={pipelineRow({ websiteReviewEnabled: null })} />,
+    );
+    expect(screen.queryByText('Website review')).toBeNull();
+    expect(screen.queryByText('Company research only')).toBeNull();
+  });
+
   it('shows the running stage', () => {
     render(
       <DraftStatusCell

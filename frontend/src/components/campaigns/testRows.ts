@@ -12,6 +12,7 @@ export function pipelineRow(
     segment: null,
     confidence: 85,
     draftState: 'none',
+    websiteReviewEnabled: null,
     stage: null,
     lastError: null,
     subject: '',

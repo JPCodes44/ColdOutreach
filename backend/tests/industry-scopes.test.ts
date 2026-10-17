@@ -7,8 +7,8 @@ import {
 
 const base = { name: 'Co', location: 'Toronto', size: '11-50', confidence: 90 };
 
-describe('plant-based manufacturing preset', () => {
-  it('sends the full scope and asks for role and vegan-focus fields', () => {
+describe('company research content', () => {
+  it('requests a grounded business description rather than vegan classification', () => {
     const request = JSON.parse(
       buildResearchContents({
         industry: PLANT_BASED_MANUFACTURING,
@@ -20,125 +20,63 @@ describe('plant-based manufacturing preset', () => {
         outreachTarget: { niche: 'n', offer: 'o' },
       }),
     );
-    expect(request.researchCriteria.industry).toBe(
-      'Plant-Based Food & Ingredient Manufacturers',
+    expect(request.researchCriteria.scope).toContain(
+      'sauces, dips, dry mixes, grains, pulses, nuts, seeds',
     );
-    expect(request.researchCriteria.scope).toMatch(
-      /sauces, dips, dry mixes, grains, pulses, nuts, seeds/,
+    expect(request.outputRequirements.includeFields).toContain('description');
+    expect(request.outputRequirements.includeFields).toContain(
+      'manufacturingRole',
     );
-    expect(request.researchCriteria.scope).toMatch(
-      /Exclude businesses that only retail, distribute or market/,
+    expect(request.outputRequirements.includeFields).not.toContain(
+      'plantBasedFocus',
     );
-    expect(request.outputRequirements.includeFields).toEqual(
-      expect.arrayContaining(['manufacturingRole', 'plantBasedFocus']),
+    expect(request.instruction).toContain(
+      'what the company actually makes or does',
     );
-    expect(request.outputRequirements.includeFields).toHaveLength(9);
-    expect(request.responseShape.companies[0].industry).toMatch(
-      /main product category/,
-    );
+    expect(request.instruction).toContain('specific products');
+    expect(request.researchCriteria.scope).not.toContain('exclusively vegan');
   });
 
-  it('drops non-manufacturers and labels mixed vs exclusively vegan', () => {
+  it('keeps manufacturing scope and factual descriptions without creating labels', () => {
     const results = classifyCandidates(PLANT_BASED_MANUFACTURING, [
       {
         ...base,
-        name: 'Mixed Foods',
-        domain: 'mixed.test',
-        manufacturingRole: 'co-manufacturer',
-        plantBasedFocus: 'mixed',
-      },
-      {
-        ...base,
-        name: 'Shop',
-        domain: 'shop.test',
-        manufacturingRole: 'retailer',
-        plantBasedFocus: 'exclusively-vegan',
-      },
-      {
-        ...base,
-        name: 'Brand',
-        domain: 'brand.test',
-        manufacturingRole: 'brand-only',
-        plantBasedFocus: 'exclusively-vegan',
-      },
-      {
-        ...base,
-        name: 'Unknown Role',
-        domain: 'u.test',
-        plantBasedFocus: 'mixed',
-      },
-      {
-        ...base,
-        name: 'Vegan Mills',
-        domain: 'vegan.test',
-        manufacturingRole: 'Private-Label Manufacturer',
-        plantBasedFocus: 'exclusively-vegan',
-      },
-      {
-        ...base,
-        name: 'Nut Co',
-        domain: 'nut.test',
+        domain: 'oats.test',
         manufacturingRole: 'processor',
-        plantBasedFocus: 'unknown',
-      },
-    ]);
-    // Model order is kept (the action sorts after limiting).
-    expect(results.map((r) => [r.domain, r.segment])).toEqual([
-      ['mixed.test', 'Mixed manufacturer'],
-      ['vegan.test', 'Exclusively vegan'],
-      ['nut.test', 'Vegan focus unclear'],
-    ]);
-  });
-
-  it('leaves other industries unchanged', () => {
-    expect(industryScope('software')).toBeUndefined();
-    expect(industryScope('toString')).toBeUndefined();
-    const [result] = classifyCandidates('software', [
-      { ...base, domain: 'a.test', manufacturingRole: 'retailer' },
-    ]);
-    expect(result).toMatchObject({ domain: 'a.test' });
-    expect(result?.segment).toBeUndefined();
-  });
-
-  it('accepts wording variants from the model', () => {
-    const results = classifyCandidates(PLANT_BASED_MANUFACTURING, [
-      {
-        ...base,
-        domain: 'a.test',
-        manufacturingRole: 'Contract Manufacturer',
-        plantBasedFocus: 'Exclusively Vegan',
+        plantBasedFocus: 'exclusively-vegan',
+        description:
+          'Processes oats and pulses into ingredients for food manufacturers.',
       },
       {
         ...base,
-        domain: 'b.test',
-        manufacturingRole: 'co-packer',
-        plantBasedFocus: 'vegan only',
+        domain: 'retail.test',
+        manufacturingRole: 'retailer',
+        description: 'Sells prepared foods.',
       },
       {
         ...base,
-        domain: 'c.test',
-        manufacturingRole: 'Manufacturer',
-        plantBasedFocus: 'Mixed (also dairy)',
-      },
-      {
-        ...base,
-        domain: 'd.test',
-        manufacturingRole: 'distributor and manufacturer',
+        domain: 'mixed.test',
+        manufacturingRole: 'contract manufacturer',
         plantBasedFocus: 'mixed',
+        description: 'Manufactures sauces for private-label customers.',
       },
+    ]);
+    expect(results.map((r) => r.domain)).toEqual(['oats.test', 'mixed.test']);
+    expect(results[0]!.description).toContain('Processes oats and pulses');
+    expect(results.every((r) => r.segment === undefined)).toBe(true);
+  });
+
+  it('preserves descriptions for other sectors and does not invent missing ones', () => {
+    expect(industryScope('software')).toBeUndefined();
+    const results = classifyCandidates('software', [
       {
         ...base,
-        domain: 'e.test',
-        manufacturingRole: 'food producer',
-        plantBasedFocus: 'Unknown',
+        domain: 'software.test',
+        description: 'Builds inventory planning software.',
       },
+      { ...base, domain: 'unknown.test' },
     ]);
-    expect(results.map((r) => [r.domain, r.segment])).toEqual([
-      ['a.test', 'Exclusively vegan'],
-      ['b.test', 'Exclusively vegan'],
-      ['c.test', 'Mixed manufacturer'],
-      ['d.test', 'Mixed manufacturer'],
-      ['e.test', 'Vegan focus unclear'],
-    ]);
+    expect(results[0]!.description).toBe('Builds inventory planning software.');
+    expect(results[1]!.description).toBeUndefined();
   });
 });

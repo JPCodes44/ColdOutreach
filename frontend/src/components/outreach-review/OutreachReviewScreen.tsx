@@ -34,7 +34,13 @@ export function OutreachReviewScreen({
     setStarting(true);
     setRunNotice(null);
     try {
-      const { skipped } = await requestRuns({ companyIds: [companyId] });
+      const { skipped } = await requestRuns({
+        companyIds: [companyId],
+        websiteReviewEnabled:
+          review.latestRun?.websiteReviewEnabled ??
+          review.draft?.websiteReviewEnabled ??
+          false,
+      });
       if (skipped.length > 0)
         setRunNotice(skipped.map((skip) => skip.reason).join(' '));
     } catch (error) {
@@ -49,6 +55,9 @@ export function OutreachReviewScreen({
   const evidenceText = [
     ...(evidence?.facts.map((fact) => fact.text) ?? []),
     ...(evidence?.excerpts?.map((excerpt) => excerpt.text) ?? []),
+    ...(evidence?.researchContext === undefined
+      ? []
+      : [evidence.researchContext]),
   ].join('\n');
   return (
     <section className="reviewScreen">
@@ -66,7 +75,10 @@ export function OutreachReviewScreen({
         </p>
       ) : null}
       {latestRun?.status === 'running' && review.draftState === 'running' ? (
-        <RunProgress stage={latestRun.stage} />
+        <RunProgress
+          stage={latestRun.stage}
+          websiteReviewEnabled={latestRun.websiteReviewEnabled}
+        />
       ) : null}
       {latestRun?.status === 'failed' && latestRun.error !== null ? (
         <RunError error={latestRun.error} hasDraft={draft !== null} />
@@ -82,7 +94,15 @@ export function OutreachReviewScreen({
       ) : (
         <div className="reviewLayout">
           <div className="reviewColumn">
-            {evidence !== null && analysis !== null ? (
+            {draft.websiteReviewEnabled === false ? (
+              <section className="reviewCard" aria-label="Company research">
+                <h2 className="reviewCardTitle">Company research</h2>
+                <p className="reviewMuted">
+                  Website review was turned off. This draft uses saved company
+                  research and your email instructions only.
+                </p>
+              </section>
+            ) : evidence !== null && analysis !== null ? (
               <EvidencePanel evidence={evidence} analysis={analysis} />
             ) : null}
             <WorkflowDashboard

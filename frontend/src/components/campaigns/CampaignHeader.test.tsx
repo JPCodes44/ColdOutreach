@@ -12,6 +12,8 @@ function renderHeader(overrides: Partial<CampaignHeaderProps> = {}) {
     onStatusFilterChange: vi.fn(),
     selectedCount: 1,
     running: false,
+    websiteReviewEnabled: true,
+    onWebsiteReviewChange: vi.fn(),
     onRun: vi.fn(),
     onDelete: vi.fn(),
     ...overrides,

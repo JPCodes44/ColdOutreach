@@ -12,11 +12,14 @@ import {
   parseModelJson,
   validateAnalysis,
   validateComposition,
+  validateConcepts,
   type ValidatedAnalysis,
 } from './modelOutput';
 import {
   ANALYSIS_SCHEMA,
   COMPOSITION_SCHEMA,
+  RESEARCH_COMPOSITION_SCHEMA,
+  buildResearchCompositionPrompt,
   buildAnalysisPrompt,
   buildCompositionPrompt,
   type ChatPrompt,
@@ -24,6 +27,10 @@ import {
 } from './prompts';
 import { signatureBlock, type OutreachSettingsInput } from './settingsModel';
 import type { WebsiteEvidence } from './websiteEvidence';
+import {
+  COMPANY_RESEARCH_SENDER_BACKGROUND,
+  COMPANY_RESEARCH_DEFAULT_SIGNATURE,
+} from '../prompts/cold_email_system';
 
 export type PipelineStage =
   | 'retrieving'
@@ -66,6 +73,7 @@ export async function runOutreachPipeline(
   company: PromptCompany,
   settings: OutreachSettingsInput,
   deps: PipelineDeps,
+  options: { websiteReviewEnabled?: boolean } = {},
 ): Promise<PipelineResult> {
   const stage = async (next: PipelineStage) => deps.onStage?.(next);
   const complete = async (
@@ -78,49 +86,85 @@ export async function runOutreachPipeline(
     return result;
   };
 
-  await stage('retrieving');
-  const evidence = await deps.collectEvidence(company.domain);
-  if (evidence.facts.length === 0) {
-    throw new PipelineError(
-      'No usable lead-capture evidence was found on the retrieved pages.',
+  const websiteReviewEnabled = options.websiteReviewEnabled !== false;
+  let evidence: WebsiteEvidence = {
+    sources: [],
+    facts: [],
+    excerpts: [],
+    skipped: [],
+  };
+  if (!websiteReviewEnabled) {
+    evidence.researchContext = JSON.stringify({
+      company,
+      senderBackground: COMPANY_RESEARCH_SENDER_BACKGROUND,
+    });
+  }
+  let corpus = evidenceCorpus(
+    evidence.facts,
+    evidence.excerpts,
+    evidence.researchContext,
+  );
+  let analysis: ValidatedAnalysis = {
+    businessSummary: '',
+    observations: [],
+    opportunities: [],
+    proposedWorkflow: [],
+    dashboard: { title: '', metrics: [], stages: [] },
+    droppedCount: 0,
+  };
+  if (websiteReviewEnabled) {
+    await stage('retrieving');
+    evidence = await deps.collectEvidence(company.domain);
+    if (evidence.facts.length === 0) {
+      throw new PipelineError(
+        'No usable lead-capture evidence was found on the retrieved pages.',
+      );
+    }
+    corpus = evidenceCorpus(evidence.facts, evidence.excerpts);
+
+    await stage('analyzing');
+    const analysisCompletion = await complete(
+      buildAnalysisPrompt(company, settings, evidence.facts, evidence.excerpts),
+      'lead_capture_analysis',
+      ANALYSIS_SCHEMA,
+    );
+    analysis = validateAnalysis(
+      parseModelJson(analysisCompletion.text, 'analysis'),
+      evidence.facts,
+      corpus,
     );
   }
-  const corpus = evidenceCorpus(evidence.facts, evidence.excerpts);
-
-  await stage('analyzing');
-  const analysisCompletion = await complete(
-    buildAnalysisPrompt(company, settings, evidence.facts, evidence.excerpts),
-    'lead_capture_analysis',
-    ANALYSIS_SCHEMA,
-  );
-  const analysis = validateAnalysis(
-    parseModelJson(analysisCompletion.text, 'analysis'),
-    evidence.facts,
-    corpus,
-  );
 
   await stage('composing');
   let feedback: string[] = [];
   for (let attempt = 1; ; attempt += 1) {
     const completion = await complete(
-      buildCompositionPrompt(company, settings, analysis, feedback),
+      websiteReviewEnabled
+        ? buildCompositionPrompt(company, settings, analysis, feedback)
+        : buildResearchCompositionPrompt(company, settings, feedback),
       'outreach_email',
-      COMPOSITION_SCHEMA,
+      websiteReviewEnabled ? COMPOSITION_SCHEMA : RESEARCH_COMPOSITION_SCHEMA,
     );
+    const raw = parseModelJson(completion.text, 'composition');
     const { composition, unsupportedClaims } = validateComposition(
-      parseModelJson(completion.text, 'composition'),
+      raw,
       corpus,
+      { includeDashboardIntro: websiteReviewEnabled },
     );
     if (unsupportedClaims.length > 0) {
       if (attempt >= MAX_COMPOSE_ATTEMPTS) {
         throw new PipelineError(
-          `The composed email kept making claims the website does not support (${unsupportedClaims
+          `The composed email kept making claims ${websiteReviewEnabled ? 'the website' : 'the company research'} does not support (${unsupportedClaims
             .slice(0, 3)
             .join(', ')}). No email was saved; try regenerating.`,
         );
       }
       feedback = unsupportedClaims;
       continue;
+    }
+
+    if (!websiteReviewEnabled) {
+      analysis = { ...analysis, ...validateConcepts(raw, corpus) };
     }
 
     await stage('rendering');
@@ -132,7 +176,9 @@ export async function runOutreachPipeline(
         composition.opportunityParagraph,
         composition.solutionParagraph,
         composition.dashboardIntro,
-      ].join('\n\n'),
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
       findings: analysis.observations.slice(0, 3).map((observation) => ({
         text: observation.text,
         sourceUrl: firstSource(evidence, observation.evidenceIds),
@@ -140,7 +186,9 @@ export async function runOutreachPipeline(
       workflow: analysis.proposedWorkflow,
       dashboard: analysis.dashboard,
       closing: composition.question,
-      signature: signatureBlock(settings),
+      signature:
+        signatureBlock(settings) ||
+        (websiteReviewEnabled ? '' : COMPANY_RESEARCH_DEFAULT_SIGNATURE),
     };
     const issues = validateOutreachContent(content);
     if (issues.length > 0) {

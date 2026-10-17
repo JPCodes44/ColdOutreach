@@ -100,6 +100,7 @@ async function generate(
 ) {
   const result = await t.mutation(api.outreachRuns.requestRuns, {
     companyIds: [companyId],
+    websiteReviewEnabled: true,
   });
   expect(result.started).toEqual([companyId]);
   const run = await t.run((ctx) =>
@@ -190,6 +191,160 @@ describe('settings', () => {
 });
 
 describe('pipeline runs and drafts', () => {
+  it('carries researched descriptions into drafting and refreshes them on reimport', async () => {
+    const t = await setup();
+    await addCompany(t, 'acme.test');
+    const row = await t.run((ctx) => ctx.db.query('companies').first());
+    const input = {
+      externalId: row!.externalId,
+      name: row!.name,
+      domain: row!.domain,
+      initial: row!.initial,
+      industry: row!.industry,
+      location: row!.location,
+      size: row!.size,
+      techStack: row!.techStack,
+      confidence: row!.confidence,
+      confidenceTone: row!.confidenceTone,
+      description: 'Processes oats and pulses into ingredients.',
+    };
+    await t.run((ctx) =>
+      ctx.db.patch(row!._id, { segment: 'Exclusively vegan' }),
+    );
+    await t.mutation(api.companies.importCompanies, { companies: [input] });
+    await t.mutation(api.outreachRuns.requestRuns, {
+      companyIds: ['acme.test'],
+    });
+    const run = await t.run((ctx) => ctx.db.query('pipelineRuns').first());
+    const loaded = await t.query(internal.outreachRuns.loadRunInput, {
+      runId: run!._id,
+    });
+    expect(loaded!.company.description).toBe(input.description);
+    expect(loaded!.company).not.toHaveProperty('segment');
+    const rows = await t.query(api.outreachRuns.listPipelineCompanies, {});
+    expect(rows[0]!.description).toBe(input.description);
+    expect(rows[0]!.segment).toBeNull();
+  });
+
+  it('snapshots website-review mode and loads saved company research for the action', async () => {
+    const t = await setup();
+    await addCompany(t, 'acme.test');
+    await t.mutation(api.outreachRuns.requestRuns, {
+      companyIds: ['acme.test'],
+      websiteReviewEnabled: false,
+    });
+    const runs = await t.run((ctx) => ctx.db.query('pipelineRuns').collect());
+    expect(runs[0]!.websiteReviewEnabled).toBe(false);
+    const input = await t.query(internal.outreachRuns.loadRunInput, {
+      runId: runs[0]!._id,
+    });
+    expect(input).toMatchObject({
+      websiteReviewEnabled: false,
+      company: { size: '10', techStack: [] },
+    });
+    await addCompany(t, 'default.test');
+    await t.mutation(api.outreachRuns.requestRuns, {
+      companyIds: ['default.test'],
+    });
+    const defaultRun = await t.run((ctx) =>
+      ctx.db
+        .query('pipelineRuns')
+        .withIndex('by_company', (q) => q.eq('companyId', 'default.test'))
+        .first(),
+    );
+    expect(defaultRun!.websiteReviewEnabled).toBe(false);
+  });
+
+  it('checks research-only approval against the stored research context', async () => {
+    const t = await setup();
+    await addCompany(t, 'acme.test');
+    await t.mutation(api.outreachRuns.requestRuns, {
+      companyIds: ['acme.test'],
+      websiteReviewEnabled: false,
+    });
+    const run = await t.run((ctx) => ctx.db.query('pipelineRuns').first());
+    const content = {
+      ...CONTENT,
+      opening: 'Hello 24 Hours Dental team,',
+      findings: [],
+    };
+    await t.mutation(internal.outreachRuns.completeRun, {
+      runId: run!._id,
+      evidence: {
+        sources: [],
+        facts: [],
+        skipped: [],
+        excerpts: [],
+        researchContext: JSON.stringify({ name: '24 Hours Dental' }),
+      },
+      analysis: { ...ANALYSIS, observations: [], opportunities: [] },
+      content,
+      model: 'test-model',
+    });
+    await t.mutation(api.outreachRuns.approveDraft, { companyId: 'acme.test' });
+    const review = await t.query(api.outreachRuns.getReview, {
+      companyId: 'acme.test',
+    });
+    expect(review?.draft?.status).toBe('approved');
+    expect(review?.draft?.websiteReviewEnabled).toBe(false);
+    expect(review?.evidence?.researchContext).toContain('24 Hours Dental');
+  });
+
+  it('labels table rows with the mode of the displayed run or retained draft', async () => {
+    const t = await setup();
+    await addCompany(t, 'acme.test');
+    const rows = () => t.query(api.outreachRuns.listPipelineCompanies, {});
+    expect((await rows())[0]!.websiteReviewEnabled).toBeNull();
+    await generate(t, 'acme.test');
+    expect((await rows())[0]).toMatchObject({
+      draftState: 'ready',
+      websiteReviewEnabled: true,
+    });
+    // Older runs without the mode field are website reviews too.
+    const oldRun = await t.run((ctx) => ctx.db.query('pipelineRuns').first());
+    await t.run((ctx) =>
+      ctx.db.patch(oldRun!._id, { websiteReviewEnabled: undefined }),
+    );
+    expect((await rows())[0]!.websiteReviewEnabled).toBe(true);
+    await t.mutation(api.outreachRuns.requestRuns, {
+      companyIds: ['acme.test'],
+      websiteReviewEnabled: false,
+    });
+    expect((await rows())[0]).toMatchObject({
+      draftState: 'running',
+      websiteReviewEnabled: false,
+    });
+    const latest = await t.run((ctx) =>
+      ctx.db.query('pipelineRuns').order('desc').first(),
+    );
+    await t.mutation(internal.outreachRuns.failRun, {
+      runId: latest!._id,
+      error: 'Generation failed.',
+    });
+    expect((await rows())[0]).toMatchObject({
+      draftState: 'ready',
+      websiteReviewEnabled: true,
+    });
+    await addCompany(t, 'failed.test');
+    await t.mutation(api.outreachRuns.requestRuns, {
+      companyIds: ['failed.test'],
+      websiteReviewEnabled: false,
+    });
+    const failed = await t.run((ctx) =>
+      ctx.db
+        .query('pipelineRuns')
+        .withIndex('by_company', (q) => q.eq('companyId', 'failed.test'))
+        .first(),
+    );
+    await t.mutation(internal.outreachRuns.failRun, {
+      runId: failed!._id,
+      error: 'Generation failed.',
+    });
+    expect(
+      (await rows()).find((row) => row.id === 'failed.test'),
+    ).toMatchObject({ draftState: 'failed', websiteReviewEnabled: false });
+  });
+
   it('snapshots the settings version and refuses a concurrent run', async () => {
     const t = await setup();
     await addCompany(t, 'acme.test');

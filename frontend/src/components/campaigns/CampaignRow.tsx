@@ -1,5 +1,4 @@
 import { CampaignScore } from './CampaignScore';
-import { SegmentBadge } from '../shared/SegmentBadge';
 import { DraftStatusCell } from './DraftStatusCell';
 import type { CampaignRowProps } from './types';
 
@@ -46,7 +45,14 @@ export function CampaignRow({
       >
         <span className="segmentStack">
           <span className="campaignCellText">{company.industry}</span>
-          <SegmentBadge segment={company.segment} />
+          {company.description ? (
+            <span
+              className="campaignCellText campaignResearchDescription"
+              title={company.description}
+            >
+              {company.description}
+            </span>
+          ) : null}
         </span>
       </div>
       <div role="cell" className="campaignCell campaignColStatus">

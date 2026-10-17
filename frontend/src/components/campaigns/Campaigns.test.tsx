@@ -62,10 +62,34 @@ describe('CampaignsScreen', () => {
     await userEvent.click(screen.getByRole('button', { name: /Run pipeline/ }));
     expect(mocks.requestRuns).toHaveBeenCalledWith({
       companyIds: ['acme.test', 'bolt.test'],
+      websiteReviewEnabled: false,
     });
     expect(await screen.findByRole('status')).toHaveTextContent(
       'Started 1 run. No email is sent. Bolt Electric: A run is already in progress.',
     );
+  });
+
+  it('defaults website review off and can enable it for selected companies', async () => {
+    mocks.requestRuns.mockResolvedValue({
+      started: ['acme.test'],
+      skipped: [],
+    });
+    render(<CampaignsScreen />);
+    const toggle = screen.getByRole('switch', { name: 'Review website' });
+    expect(toggle).not.toBeChecked();
+    expect(
+      screen.getByText(/company research and email instructions only/i),
+    ).toBeInTheDocument();
+    await userEvent.click(toggle);
+    expect(toggle).toBeChecked();
+    await userEvent.click(
+      screen.getByRole('checkbox', { name: 'Select Acme Plumbing' }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: /Run pipeline/ }));
+    expect(mocks.requestRuns).toHaveBeenCalledWith({
+      companyIds: ['acme.test'],
+      websiteReviewEnabled: true,
+    });
   });
 
   it('confirms deletes and surfaces backend refusals', async () => {

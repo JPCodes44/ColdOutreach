@@ -21,7 +21,7 @@ export function ClaimReview({
       {claims.length > 0 ? (
         <fieldset className="reviewBanner reviewBanner-warning reviewClaimList">
           <legend className="reviewClaimLegend">
-            Not supported by the website evidence. Edit these out, or confirm
+            Not supported by the available evidence. Edit these out, or confirm
             each is accurate before approving:
           </legend>
           {claims.map((claim) => (

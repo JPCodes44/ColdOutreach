@@ -13,7 +13,7 @@ import { computeCostUsd, GEMINI_GROUNDING_EST_USD } from './pricing';
 import { runGeminiWithFallback } from './gemini';
 import { COMPANY_RESEARCH_SYSTEM_PROMPT } from './prompts/company_research_system';
 import { deletePipelineState } from './outreachRuns';
-import { industryScope, segmentRank } from './outreach/industryScopes';
+import { industryScope } from './outreach/industryScopes';
 import { deleteLegacyArtifacts, hasActiveSends } from './send';
 import {
   normalizeCompanyDomain,
@@ -39,6 +39,7 @@ interface CompanyResearchCandidate {
   name?: string;
   domain?: string;
   industry?: string;
+  description?: string;
   location?: string;
   size?: string;
   techStack?: string[];
@@ -52,6 +53,7 @@ interface CompanyResearchResult {
   name: string;
   domain: string;
   industry: string;
+  description?: string;
   location: string;
   size: string;
   techStack: string[];
@@ -82,6 +84,9 @@ function normalizeCompany(
     name,
     domain,
     industry: company.industry?.trim() || 'Unknown',
+    ...(company.description?.trim()
+      ? { description: company.description.trim().slice(0, 1000) }
+      : {}),
     location: company.location?.trim() || 'Unknown',
     size: company.size?.trim() || 'Unknown',
     techStack: Array.isArray(company.techStack) ? company.techStack : [],
@@ -94,7 +99,7 @@ function normalizeCompany(
 
 /**
  * Apply an industry preset: drop out-of-scope candidates (e.g. retailers for
- * a manufacturers-only scope) and label the rest.
+ * a manufacturers-only scope), retaining their researched descriptions.
  */
 export function classifyCandidates(
   industry: string,
@@ -104,8 +109,8 @@ export function classifyCandidates(
   if (preset === undefined) return candidates.map(normalizeCompany);
   const kept: CompanyResearchResult[] = [];
   for (const candidate of candidates) {
-    const { keep, segment } = preset.classify(candidate);
-    if (keep) kept.push({ ...normalizeCompany(candidate), segment });
+    const { keep } = preset.classify(candidate);
+    if (keep) kept.push(normalizeCompany(candidate));
   }
   return kept;
 }
@@ -165,6 +170,8 @@ export function buildResearchContents(args: ResearchPromptArgs): string {
           name: 'string',
           domain: 'string',
           industry: 'string',
+          description:
+            'A concise factual description of what the company makes or does, including specific products or services supported by search results; no category badges or inferred exclusivity claims.',
           location: 'string',
           size: 'string',
           techStack: ['string'],
@@ -179,6 +186,7 @@ export function buildResearchContents(args: ResearchPromptArgs): string {
           'name',
           'domain',
           'industry',
+          'description',
           'location',
           'size',
           'techStack',
@@ -267,11 +275,10 @@ export const research = action({
       args.industry,
       parseResearchResponse(result.text).slice(0, discoveryLimit),
     );
-    // Limit first, then group by segment for display, so sorting never
-    // pushes one segment (e.g. mixed manufacturers) out of the results.
-    const companies = (await filterPreviouslyEmailed(ctx, candidates))
-      .slice(0, requestedLimit)
-      .sort((a, b) => segmentRank(a.segment) - segmentRank(b.segment));
+    const companies = (await filterPreviouslyEmailed(ctx, candidates)).slice(
+      0,
+      requestedLimit,
+    );
 
     return { companies, total: companies.length };
   },
@@ -282,6 +289,7 @@ export const research = action({
         name: v.string(),
         domain: v.string(),
         industry: v.string(),
+        description: v.optional(v.string()),
         location: v.string(),
         size: v.string(),
         techStack: v.array(v.string()),
@@ -329,6 +337,7 @@ const companyInput = v.object({
   domain: v.string(),
   initial: v.string(),
   industry: v.string(),
+  description: v.optional(v.string()),
   location: v.string(),
   size: v.string(),
   techStack: v.array(v.string()),
@@ -360,6 +369,12 @@ export const importCompanies = mutation({
           createdAt: new Date().toISOString(),
         });
         inserted += 1;
+      } else if (company.description?.trim()) {
+        await ctx.db.patch(existing._id, {
+          description: company.description.trim(),
+          industry: company.industry,
+          segment: undefined,
+        });
       }
     }
     return { inserted };

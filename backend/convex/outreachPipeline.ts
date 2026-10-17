@@ -62,62 +62,70 @@ export const execute = internalAction({
       const model = process.env.OPENAI_OUTREACH_MODEL?.trim() || DEFAULT_MODEL;
       const openai = new OpenAI({ apiKey, timeout: 90_000, maxRetries: 1 });
 
-      const result = await runOutreachPipeline(input.company, input.settings, {
-        collectEvidence: (domain) =>
-          collectWebsiteEvidence(domain, {
-            fetch: (url, init) => fetch(url, init),
-            renderPage: firecrawlRenderer(
-              process.env.FIRECRAWL_API_KEY,
-              (url, init) => fetch(url, init),
-            ),
-            resolveHost: async (hostname) =>
-              (await lookup(hostname, { all: true, verbatim: true })).map(
-                (entry) => entry.address,
+      const result = await runOutreachPipeline(
+        input.company,
+        input.settings,
+        {
+          collectEvidence: (domain) =>
+            collectWebsiteEvidence(domain, {
+              fetch: (url, init) => fetch(url, init),
+              renderPage: firecrawlRenderer(
+                process.env.FIRECRAWL_API_KEY,
+                (url, init) => fetch(url, init),
               ),
-          }),
-        completeJson: async (
-          prompt,
-          schemaName,
-          schema,
-        ): Promise<JsonCompletion> => {
-          const response = await openai.chat.completions.create({
-            model,
-            messages: [
-              { role: 'system', content: prompt.system },
-              { role: 'user', content: prompt.user },
-            ],
-            response_format: {
-              type: 'json_schema',
-              json_schema: { name: schemaName, strict: true, schema },
-            },
-          });
-          return {
-            text: response.choices[0]?.message.content ?? null,
-            promptTokens: response.usage?.prompt_tokens ?? 0,
-            completionTokens: response.usage?.completion_tokens ?? 0,
-            model,
-          };
-        },
-        onStage: (stage) =>
-          ctx.runMutation(internal.outreachRuns.setRunStage, { runId, stage }),
-        onUsage: async (usage) => {
-          try {
-            await ctx.runMutation(internal.usageDb.recordUsage, {
-              provider: 'openai',
-              costUsd: computeCostUsd(
-                usage.model,
-                usage.promptTokens,
-                usage.completionTokens,
-              ),
+              resolveHost: async (hostname) =>
+                (await lookup(hostname, { all: true, verbatim: true })).map(
+                  (entry) => entry.address,
+                ),
+            }),
+          completeJson: async (
+            prompt,
+            schemaName,
+            schema,
+          ): Promise<JsonCompletion> => {
+            const response = await openai.chat.completions.create({
+              model,
+              messages: [
+                { role: 'system', content: prompt.system },
+                { role: 'user', content: prompt.user },
+              ],
+              response_format: {
+                type: 'json_schema',
+                json_schema: { name: schemaName, strict: true, schema },
+              },
             });
-          } catch (trackError) {
-            console.error(
-              'Usage tracking failed',
-              trackError instanceof Error ? trackError.name : '',
-            );
-          }
+            return {
+              text: response.choices[0]?.message.content ?? null,
+              promptTokens: response.usage?.prompt_tokens ?? 0,
+              completionTokens: response.usage?.completion_tokens ?? 0,
+              model,
+            };
+          },
+          onStage: (stage) =>
+            ctx.runMutation(internal.outreachRuns.setRunStage, {
+              runId,
+              stage,
+            }),
+          onUsage: async (usage) => {
+            try {
+              await ctx.runMutation(internal.usageDb.recordUsage, {
+                provider: 'openai',
+                costUsd: computeCostUsd(
+                  usage.model,
+                  usage.promptTokens,
+                  usage.completionTokens,
+                ),
+              });
+            } catch (trackError) {
+              console.error(
+                'Usage tracking failed',
+                trackError instanceof Error ? trackError.name : '',
+              );
+            }
+          },
         },
-      });
+        { websiteReviewEnabled: input.websiteReviewEnabled },
+      );
 
       await ctx.runMutation(internal.outreachRuns.completeRun, {
         runId,
@@ -126,6 +134,9 @@ export const execute = internalAction({
           facts: result.evidence.facts,
           skipped: result.evidence.skipped,
           excerpts: result.evidence.excerpts,
+          ...(result.evidence.researchContext === undefined
+            ? {}
+            : { researchContext: result.evidence.researchContext }),
         },
         analysis: result.analysis,
         content: result.content,

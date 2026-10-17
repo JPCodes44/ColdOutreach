@@ -16,6 +16,7 @@ interface CompanyResearchResult {
   name: string;
   domain: string;
   industry: string;
+  description?: string;
   location: string;
   size: string;
   techStack: string[];
@@ -67,7 +68,9 @@ function toCompany(result: CompanyResearchResult): Company {
     techStack: result.techStack,
     confidence: result.confidence,
     confidenceTone,
-    ...(result.segment !== undefined ? { segment: result.segment } : {}),
+    ...(result.description !== undefined
+      ? { description: result.description }
+      : {}),
   };
 }
 

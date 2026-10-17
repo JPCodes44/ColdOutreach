@@ -44,6 +44,51 @@ describe('OutreachReviewScreen', () => {
     expect(screen.getByTitle('HTML email preview')).toBeInTheDocument();
   });
 
+  it('explains research-only drafts and preserves the mode when regenerating', async () => {
+    const fixture = reviewFixture();
+    mocks.review = reviewFixture({
+      draft: { ...fixture.draft!, websiteReviewEnabled: false },
+      latestRun: { ...fixture.latestRun!, websiteReviewEnabled: false },
+      evidence: { sources: [], facts: [], skipped: [], excerpts: [] },
+    });
+    mocks.requestRuns.mockResolvedValue({
+      started: ['acme.test'],
+      skipped: [],
+    });
+    render(<OutreachReviewScreen companyId="acme.test" />);
+    expect(
+      screen.getByText(/Website review was turned off/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('region', { name: 'Website evidence' }),
+    ).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: /Regenerate/ }));
+    expect(mocks.requestRuns).toHaveBeenCalledWith({
+      companyIds: ['acme.test'],
+      websiteReviewEnabled: false,
+    });
+  });
+
+  it('omits website progress steps when website review is off', () => {
+    mocks.review = reviewFixture({
+      draftState: 'running',
+      draft: null,
+      latestRun: {
+        ...reviewFixture().latestRun!,
+        status: 'running',
+        stage: 'composing',
+        websiteReviewEnabled: false,
+      },
+    });
+    render(<OutreachReviewScreen companyId="acme.test" />);
+    expect(screen.queryByText('Reviewing website')).toBeNull();
+    expect(screen.queryByText('Finding opportunities')).toBeNull();
+    expect(screen.getByText('Writing email')).toHaveAttribute(
+      'aria-current',
+      'step',
+    );
+  });
+
   it('shows progress while running and keeps the previous draft on failure', () => {
     mocks.review = reviewFixture({
       draftState: 'running',
@@ -98,6 +143,7 @@ describe('OutreachReviewScreen', () => {
     await userEvent.click(screen.getByRole('button', { name: /Run pipeline/ }));
     expect(mocks.requestRuns).toHaveBeenCalledWith({
       companyIds: ['acme.test'],
+      websiteReviewEnabled: false,
     });
     expect(await screen.findByRole('status')).toHaveTextContent(
       'A run is already in progress.',

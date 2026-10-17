@@ -10,7 +10,7 @@ export const listPipelineCompaniesQuery = makeFunctionReference<
 /** Start background pipeline runs. Generation never sends email. */
 export const requestRunsMutation = makeFunctionReference<
   'mutation',
-  { companyIds: string[] },
+  { companyIds: string[]; websiteReviewEnabled?: boolean },
   { started: string[]; skipped: { companyId: string; reason: string }[] }
 >('outreachRuns:requestRuns');
 

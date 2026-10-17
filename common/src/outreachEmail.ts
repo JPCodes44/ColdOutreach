@@ -403,14 +403,16 @@ export function findUnsupportedClaims(
   return [...found];
 }
 
-/** Plain-text corpus of retrieved website evidence (facts + page excerpts). */
+/** Claim-checking corpus from website evidence and optional saved company research. */
 export function evidenceCorpus(
   facts: { text: string }[],
   excerpts: { text: string }[] = [],
+  researchContext?: string,
 ): string {
   return [
     ...facts.map((fact) => fact.text),
     ...excerpts.map((excerpt) => excerpt.text),
+    ...(researchContext === undefined ? [] : [researchContext]),
   ].join('\n');
 }
 

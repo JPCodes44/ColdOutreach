@@ -94,6 +94,8 @@ export interface PageExcerpt {
 }
 
 export interface WebsiteEvidence {
+  /** Saved discovery context for drafts generated without a website review. */
+  researchContext?: string;
   sources: EvidenceSource[];
   facts: EvidenceFact[];
   excerpts: PageExcerpt[];

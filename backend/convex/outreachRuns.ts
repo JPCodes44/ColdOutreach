@@ -102,12 +102,15 @@ export async function draftState(
  * Settings and is executed in the background; generation never sends email.
  */
 export const requestRuns = mutation({
-  args: { companyIds: v.array(v.string()) },
+  args: {
+    companyIds: v.array(v.string()),
+    websiteReviewEnabled: v.optional(v.boolean()),
+  },
   returns: v.object({
     started: v.array(v.string()),
     skipped: v.array(v.object({ companyId: v.string(), reason: v.string() })),
   }),
-  handler: async (ctx, { companyIds }) => {
+  handler: async (ctx, { companyIds, websiteReviewEnabled = false }) => {
     await requireOperator(ctx);
     const unique = [...new Set(companyIds)];
     if (unique.length > MAX_RUNS_PER_REQUEST) {
@@ -126,7 +129,7 @@ export const requestRuns = mutation({
         skipped.push({ companyId, reason: 'Company not found.' });
         continue;
       }
-      if (company.domain.trim().length === 0) {
+      if (websiteReviewEnabled && company.domain.trim().length === 0) {
         skipped.push({ companyId, reason: 'Company has no website domain.' });
         continue;
       }
@@ -146,6 +149,7 @@ export const requestRuns = mutation({
         companyId,
         status: 'running',
         stage: 'queued',
+        websiteReviewEnabled,
         settings,
         startedAt: now,
       });
@@ -168,11 +172,17 @@ export const loadRunInput = internalQuery({
     if (company === null) return null;
     return {
       settings: run.settings,
+      websiteReviewEnabled: run.websiteReviewEnabled ?? true,
       company: {
         name: company.name,
         domain: company.domain,
         industry: company.industry,
         location: company.location,
+        size: company.size,
+        techStack: company.techStack,
+        ...(company.description === undefined
+          ? {}
+          : { description: company.description }),
       },
     };
   },
@@ -269,14 +279,27 @@ export const listPipelineCompanies = query({
     const rows = await Promise.all(
       companies.map(async (company) => {
         const { state, run, draft } = await draftState(ctx, company.externalId);
+        // Match the mode to the status shown: an active/failed run, or the
+        // retained draft when a later attempt failed without replacing it.
+        const statusRun =
+          state === 'running' || state === 'failed'
+            ? run
+            : draft !== null
+              ? await ctx.db.get(draft.runId)
+              : null;
         return {
           id: company.externalId,
           name: company.name,
           domain: company.domain,
           industry: company.industry,
-          segment: company.segment ?? null,
+          segment: null,
+          description: company.description ?? null,
           confidence: company.confidence,
           draftState: state,
+          websiteReviewEnabled:
+            statusRun === null
+              ? null
+              : (statusRun.websiteReviewEnabled ?? true),
           stage: run?.status === 'running' ? run.stage : null,
           lastError: run?.status === 'failed' ? (run.error ?? null) : null,
           subject: draft?.content.subject ?? '',
@@ -323,6 +346,7 @@ export const getReview = query({
               startedAt: run.startedAt,
               finishedAt: run.finishedAt ?? null,
               settingsVersion: run.settings.version,
+              websiteReviewEnabled: run.websiteReviewEnabled ?? true,
             },
       draft:
         draft === null
@@ -336,6 +360,7 @@ export const getReview = query({
               editedAt: draft.editedAt ?? null,
               updatedAt: draft.updatedAt,
               settingsVersion: draft.settingsVersion,
+              websiteReviewEnabled: draftRun?.websiteReviewEnabled ?? true,
             },
       evidence: draftRun?.evidence ?? null,
       analysis: draftRun?.analysis ?? null,
@@ -382,7 +407,11 @@ export const saveDraftEdits = mutation({
 /** The evidence corpus the draft's claims are checked against. */
 async function draftCorpus(ctx: QueryCtx, draft: Doc<'outreachDrafts'>) {
   const run = await ctx.db.get(draft.runId);
-  return evidenceCorpus(run?.evidence?.facts ?? [], run?.evidence?.excerpts);
+  return evidenceCorpus(
+    run?.evidence?.facts ?? [],
+    run?.evidence?.excerpts,
+    run?.evidence?.researchContext,
+  );
 }
 
 /**

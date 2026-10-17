@@ -39,17 +39,26 @@ The workspace package names remain `@emailstrat/*` for import compatibility.
    precise scope (manufacturers, processors, co-, contract and private-label
    manufacturers of plant-based foods and ingredients, including products not
    branded vegan), drops results Gemini classifies as retailers, distributors
-   or brand-only marketers, and labels each company **Exclusively vegan**,
-   **Mixed manufacturer**, or **Vegan focus unclear** (shown in Companies and
-   Pipeline). These labels are Gemini's judgement from public information;
-   confirm them on the company's site. Presets live in
+   or brand-only marketers. Research returns a factual description of what each
+   company makes or does, including supported products or services. That
+   description is displayed in Companies/Pipeline and used to personalize the
+   email; vegan/mixed classification labels are no longer requested or used.
+   Reimporting a researched company refreshes its description without changing
+   existing drafts. Older records without descriptions fall back to industry
+   until researched again. Presets live in
    `backend/convex/outreach/industryScopes.ts`.
 3. **Pipeline** — select one or more companies (up to 10 at a time) and run the
-   pipeline. It retrieves the company's homepage and up to three relevant
+   pipeline. With **Review website** enabled, it retrieves the company's homepage and up to three relevant
    same-site pages (contact, booking, quote, services), extracts contact methods,
    forms, calls to action, and chat/booking widgets as numbered evidence, then
    analyzes and composes the email. Progress is shown per stage. Generating a
-   draft never sends email.
+   draft never sends email. Leave **Review website** off to skip retrieval and
+   website analysis and draft from saved company research (name, domain,
+   industry, description, location, size, and tech stack) and your email instructions
+   instead. The toggle starts disabled and applies to the next selected batch;
+   each run saves its mode, and regenerating from Review preserves that mode.
+   Research-only drafts include a proposed workflow and illustrative dashboard,
+   without website findings or claims that the site was reviewed.
 4. **Review** — inspect sources (with retrieval times), observed facts vs.
    hypotheses, the proposed workflow, and the dashboard concept. Edit the
    subject, opening, closing, and signature, preview the HTML and plain-text

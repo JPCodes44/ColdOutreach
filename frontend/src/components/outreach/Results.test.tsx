@@ -60,17 +60,22 @@ function renderRow(selected: boolean, onToggle = vi.fn()) {
 }
 
 describe('ResultsRow', () => {
-  it('flags exclusively vegan manufacturers', () => {
+  it('shows the research description instead of legacy classifications', () => {
     render(
       <ResultsRow
-        company={{ ...companies[0]!, segment: 'Exclusively vegan' }}
+        company={{
+          ...companies[0]!,
+          segment: 'Exclusively vegan',
+          description: 'Processes oats and pulses into ingredients.',
+        }}
         selected={false}
         onToggle={vi.fn()}
       />,
     );
-    expect(screen.getByText('Exclusively vegan')).toHaveClass(
-      'segmentBadge-vegan',
-    );
+    expect(screen.queryByText('Exclusively vegan')).toBeNull();
+    expect(
+      screen.getByText('Processes oats and pulses into ingredients.'),
+    ).toBeInTheDocument();
   });
 
   it('reflects selection state in its checkbox', () => {

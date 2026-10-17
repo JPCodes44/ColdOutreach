@@ -24,6 +24,7 @@ export interface Company {
   /** Single-letter avatar glyph. */
   initial: string;
   industry: string;
+  description?: string;
   location: string;
   size: string;
   techStack: string[];

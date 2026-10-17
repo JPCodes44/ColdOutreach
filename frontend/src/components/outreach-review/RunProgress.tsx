@@ -9,8 +9,16 @@ const STEPS: { stage: RunStage; label: string }[] = [
 ];
 
 /** Stepper for an in-flight pipeline run. */
-export function RunProgress({ stage }: RunProgressProps) {
-  const current = STEPS.findIndex((step) => step.stage === stage);
+export function RunProgress({
+  stage,
+  websiteReviewEnabled = true,
+}: RunProgressProps) {
+  const steps = websiteReviewEnabled
+    ? STEPS
+    : STEPS.filter(
+        (step) => step.stage === 'composing' || step.stage === 'rendering',
+      );
+  const current = steps.findIndex((step) => step.stage === stage);
   return (
     <section
       className="reviewCard reviewProgress"
@@ -21,7 +29,7 @@ export function RunProgress({ stage }: RunProgressProps) {
         Generating draft… no email will be sent.
       </p>
       <ol className="reviewSteps">
-        {STEPS.map((step, index) => {
+        {steps.map((step, index) => {
           const state =
             index < current ? 'done' : index === current ? 'active' : 'pending';
           return (

@@ -12,6 +12,7 @@ export function usePipelineActions(
   selectedIds: ReadonlySet<string>,
   clearSelected: () => void,
   nameOf: (id: string) => string,
+  websiteReviewEnabled: boolean,
 ) {
   const requestRuns = useMutation(requestRunsMutation);
   const deleteCompanies = useMutation(deleteCompaniesMutation);
@@ -28,7 +29,10 @@ export function usePipelineActions(
     }
     setRunning(true);
     try {
-      const { started, skipped } = await requestRuns({ companyIds: ids });
+      const { started, skipped } = await requestRuns({
+        companyIds: ids,
+        websiteReviewEnabled,
+      });
       const parts = [
         `Started ${started.length} run${started.length === 1 ? '' : 's'}. No email is sent.`,
       ];

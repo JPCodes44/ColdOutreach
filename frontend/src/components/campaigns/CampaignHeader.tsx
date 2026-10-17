@@ -10,6 +10,8 @@ export function CampaignHeader({
   onStatusFilterChange,
   selectedCount,
   running,
+  websiteReviewEnabled,
+  onWebsiteReviewChange,
   onRun,
   onDelete,
 }: CampaignHeaderProps) {
@@ -19,10 +21,24 @@ export function CampaignHeader({
         <h1 className="campaignTitle">Outreach Pipeline</h1>
         <div className="campaignHeaderRowCompact">
           <p className="campaignSubtitle">
-            Select companies and run the website-review pipeline. Generating a
-            draft never sends email.
+            {websiteReviewEnabled
+              ? 'Draft emails using website review and company research.'
+              : 'Draft emails using company research and email instructions only.'}{' '}
+            Generating a draft never sends email.
           </p>
           <div className="campaignHeaderActions">
+            <label className="campaignWebsiteToggle">
+              <input
+                type="checkbox"
+                role="switch"
+                checked={websiteReviewEnabled}
+                disabled={running}
+                onChange={(event) =>
+                  onWebsiteReviewChange(event.target.checked)
+                }
+              />
+              Review website
+            </label>
             <label className="campaignSearch">
               <span className="campaignSearchIcon">
                 <Icon name="search" size={18} />

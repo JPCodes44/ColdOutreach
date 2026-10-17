@@ -13,6 +13,7 @@ import {
 } from '../convex/outreach/pipeline';
 import {
   buildAnalysisPrompt,
+  buildResearchCompositionPrompt,
   fenceUntrusted,
   type ChatPrompt,
 } from '../convex/outreach/prompts';
@@ -168,6 +169,244 @@ function fakeDeps(responses: unknown[], overrides: Partial<PipelineDeps> = {}) {
 }
 
 describe('runOutreachPipeline', () => {
+  it.each(['Plant-based food production', 'Logistics', 'Dental services'])(
+    'uses Justin’s learning-first template and company sector context for %s',
+    (industry) => {
+      const prompt = buildResearchCompositionPrompt(
+        { ...COMPANY, industry },
+        SETTINGS,
+      );
+      expect(prompt.user).toContain(industry);
+      expect(prompt.system).toContain(
+        'Nanotechnology Engineering at the University of Waterloo',
+      );
+      expect(prompt.system).toContain(
+        'digital-health startup that raised approximately $2M',
+      );
+      expect(prompt.system).toContain(
+        'logistics, using data to investigate operational bottlenecks',
+      );
+      expect(prompt.system).toContain(
+        'adapt the sector and business-type wording',
+      );
+      expect(prompt.system).toContain(
+        'only if the company research explicitly supplies',
+      );
+      expect(prompt.system).toContain('for free in exchange for feedback');
+      expect(prompt.system).toContain('no obligation to continue');
+      expect(prompt.system).not.toContain('No meeting demands');
+    },
+  );
+
+  it('allows the supplied sender background without allowing invented prospect figures', async () => {
+    const draft = {
+      ...COMPOSITION,
+      observationParagraph:
+        'I came across your company while learning about dental services.',
+      opportunityParagraph:
+        'My background includes Nanotechnology Engineering at the University of Waterloo and a digital-health startup that raised approximately $2M.',
+      solutionParagraph:
+        'I would love to learn where repetitive work takes up your team’s time.',
+      question:
+        'Would you be open to a brief conversation? I could build and test a small improvement for free in exchange for feedback, with no obligation to continue.',
+      proposedWorkflow: ANALYSIS.proposedWorkflow,
+      dashboard: {
+        ...ANALYSIS.dashboard,
+        metrics: [ANALYSIS.dashboard.metrics[0]],
+      },
+    };
+    const { deps } = fakeDeps([draft]);
+    const result = await runOutreachPipeline(COMPANY, SETTINGS, deps, {
+      websiteReviewEnabled: false,
+    });
+    expect(result.content.opening).toContain('$2M');
+    expect(result.evidence.researchContext).toContain('$2M');
+    const invented = fakeDeps([
+      { ...draft, solutionParagraph: 'Your company loses $50,000.' },
+      { ...draft, solutionParagraph: 'Your company loses $50,000.' },
+    ]);
+    await expect(
+      runOutreachPipeline(COMPANY, SETTINGS, invented.deps, {
+        websiteReviewEnabled: false,
+      }),
+    ).rejects.toThrow(/company research.*does not support/);
+  });
+
+  it('personalizes from the researched description and excludes legacy segment labels', () => {
+    const prompt = buildResearchCompositionPrompt(
+      {
+        ...COMPANY,
+        description: 'Processes oats and pulses into food ingredients.',
+        segment: 'Exclusively vegan',
+      },
+      SETTINGS,
+    );
+    expect(prompt.user).toContain(
+      'Processes oats and pulses into food ingredients.',
+    );
+    expect(prompt.user).not.toContain('Exclusively vegan');
+    expect(prompt.user).not.toContain('segment');
+    expect(prompt.system).toContain(
+      'derive the sector and business-type wording from the researched description',
+    );
+  });
+
+  it('drafts from company research without retrieving or analyzing a website', async () => {
+    const company = {
+      ...COMPANY,
+      size: 'Small',
+      techStack: ['Example CRM'],
+      description: 'An independent clinic providing dental care.',
+      segment: 'Independent clinic',
+    };
+    const draft = {
+      ...COMPOSITION,
+      observationParagraph:
+        'I am reaching out to your dental team in Springfield.',
+      opportunityParagraph: 'Would inquiry routing be useful for your team?',
+      proposedWorkflow: ANALYSIS.proposedWorkflow,
+      dashboard: {
+        ...ANALYSIS.dashboard,
+        metrics: [ANALYSIS.dashboard.metrics[0]],
+      },
+    };
+    let retrievals = 0;
+    const { deps, prompts, stages } = fakeDeps([draft], {
+      collectEvidence: async () => {
+        retrievals++;
+        throw new Error('Must not fetch');
+      },
+    });
+    const result = await runOutreachPipeline(company, SETTINGS, deps, {
+      websiteReviewEnabled: false,
+    });
+    expect(retrievals).toBe(0);
+    expect(stages).toEqual(['composing', 'rendering']);
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]!.user).toContain('Example CRM');
+    expect(prompts[0]!.user).toContain(
+      'An independent clinic providing dental care.',
+    );
+    expect(prompts[0]!.user).not.toContain('segment');
+    expect(prompts[0]!.system).toContain(SETTINGS.customInstructions);
+    expect(prompts[0]!.system).toContain(
+      'Do not claim to have visited or reviewed',
+    );
+    expect(prompts[0]!.system).not.toContain(
+      'Every observation and opportunity must cite',
+    );
+    expect(result.evidence.facts).toEqual([]);
+    expect(result.evidence.sources).toEqual([]);
+    expect(result.analysis.observations).toEqual([]);
+    expect(result.content.findings).toEqual([]);
+    expect(result.content.opening).toContain('dental team in Springfield');
+    expect(renderOutreachEmail(result.content).text).not.toContain(
+      'Website findings',
+    );
+  });
+
+  it('accepts factual company names from research as the claim corpus', async () => {
+    const company = { ...COMPANY, name: '24 Hours Dental' };
+    const draft = {
+      ...COMPOSITION,
+      greeting: 'Hello 24 Hours Dental team,',
+      observationParagraph: 'I am reaching out to your dental team.',
+      opportunityParagraph: 'Would inquiry routing be useful?',
+      proposedWorkflow: ANALYSIS.proposedWorkflow,
+      dashboard: {
+        ...ANALYSIS.dashboard,
+        metrics: [ANALYSIS.dashboard.metrics[0]],
+      },
+    };
+    const { deps, prompts } = fakeDeps([draft]);
+    const result = await runOutreachPipeline(company, SETTINGS, deps, {
+      websiteReviewEnabled: false,
+    });
+    expect(prompts).toHaveLength(1);
+    expect(result.content.opening).toContain('24 Hours Dental');
+    expect(result.evidence.researchContext).toContain('24 Hours Dental');
+  });
+
+  it('keeps claim validation and retry feedback in research-only drafts', async () => {
+    const draft = {
+      ...COMPOSITION,
+      observationParagraph: 'I am reaching out to your dental team.',
+      opportunityParagraph: 'Would inquiry routing be useful?',
+      proposedWorkflow: ANALYSIS.proposedWorkflow,
+      dashboard: {
+        ...ANALYSIS.dashboard,
+        metrics: [ANALYSIS.dashboard.metrics[0]],
+      },
+    };
+    const invented = {
+      ...draft,
+      solutionParagraph: 'This lifts bookings by 30%.',
+    };
+    const { deps, prompts } = fakeDeps([invented, draft]);
+    await runOutreachPipeline(COMPANY, SETTINGS, deps, {
+      websiteReviewEnabled: false,
+    });
+    expect(prompts).toHaveLength(2);
+    expect(prompts[1]!.user).toContain('30%');
+    const invalid = fakeDeps([
+      {
+        ...draft,
+        dashboard: { title: 'Missing metrics', metrics: [], stages: [] },
+      },
+    ]);
+    await expect(
+      runOutreachPipeline(COMPANY, SETTINGS, invalid.deps, {
+        websiteReviewEnabled: false,
+      }),
+    ).rejects.toThrow(/incomplete workflow or dashboard/);
+  });
+
+  it('omits extra dashboard commentary and fills the research-only signature when blank', async () => {
+    const extraLine =
+      'One idea could be a simple dashboard concept to visualize your workflow and lead management.';
+    const draft = {
+      ...COMPOSITION,
+      observationParagraph:
+        'I came across your company while learning about dental services.',
+      opportunityParagraph:
+        'My background is in Nanotechnology Engineering at the University of Waterloo.',
+      solutionParagraph:
+        'I’m exploring opportunities to build practical tools for dental practices.',
+      dashboardIntro: extraLine,
+      question:
+        'Would you be open to a brief conversation? I’d be happy to build and test an improvement for free in exchange for feedback, with no obligation to continue.',
+      proposedWorkflow: ANALYSIS.proposedWorkflow,
+      dashboard: {
+        ...ANALYSIS.dashboard,
+        metrics: [ANALYSIS.dashboard.metrics[0]],
+      },
+    };
+    const { deps, prompts } = fakeDeps([draft]);
+    const result = await runOutreachPipeline(
+      COMPANY,
+      { ...SETTINGS, senderName: '', signature: '' },
+      deps,
+      { websiteReviewEnabled: false },
+    );
+    expect(result.content.opening).not.toContain(extraLine);
+    expect(result.content.closing).toBe(draft.question);
+    expect(result.content.signature).toBe('Best,\nJustin');
+    expect(prompts[0]!.system).toContain('Do not add extra paragraphs');
+    expect(prompts[0]!.system).toContain(
+      'dashboardIntro: return an empty string',
+    );
+    expect(renderOutreachEmail(result.content).text).toContain('Best,\nJustin');
+    expect(result.content.dashboard.metrics).not.toHaveLength(0);
+    const saved = fakeDeps([{ ...draft, dashboardIntro: '' }]);
+    const savedResult = await runOutreachPipeline(
+      COMPANY,
+      SETTINGS,
+      saved.deps,
+      { websiteReviewEnabled: false },
+    );
+    expect(savedResult.content.signature).toBe('Sam Rivera\nRivera Automation');
+  });
+
   it('produces a complete email with all five formula elements', async () => {
     const { deps, stages } = fakeDeps([ANALYSIS, COMPOSITION]);
     const result = await runOutreachPipeline(COMPANY, SETTINGS, deps);

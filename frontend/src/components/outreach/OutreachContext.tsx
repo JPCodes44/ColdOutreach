@@ -30,6 +30,7 @@ interface ImportCompanyInput {
   domain: string;
   initial: string;
   industry: string;
+  description?: string;
   location: string;
   size: string;
   techStack: string[];
@@ -167,7 +168,7 @@ export function OutreachProvider({ children }: { children: ReactNode }) {
         techStack: c.techStack,
         confidence: c.confidence,
         confidenceTone: c.confidenceTone,
-        ...(c.segment !== undefined ? { segment: c.segment } : {}),
+        ...(c.description !== undefined ? { description: c.description } : {}),
       })),
     });
 
