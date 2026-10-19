@@ -447,3 +447,36 @@
   align-items: flex-start;
   gap: 8px;
 }
+
+/* Full review over the pipeline, with its own scrolling and pinned close control. */
+.pipelineReviewModal {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 32px);
+  overflow: hidden;
+  border: 1px solid #c3c6d7;
+  border-radius: 12px;
+  background: #f7f9fb;
+  box-shadow: 0 24px 48px rgba(27, 39, 51, 0.24);
+}
+
+.pipelineReviewModalToolbar {
+  display: flex;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  padding: 12px 20px;
+  border-bottom: 1px solid #c3c6d7;
+}
+
+.pipelineReviewModalContent {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px;
+}
+
+@media (max-width: 600px) {
+  .pipelineReviewModalContent {
+    padding: 12px;
+  }
+}

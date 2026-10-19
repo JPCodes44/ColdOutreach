@@ -1,4 +1,3 @@
-import { ClaimReview } from './ClaimReview';
 import { DraftActions } from './DraftActions';
 import type { DraftEditorProps, EditableFields } from './types';
 
@@ -16,34 +15,21 @@ const AREAS: {
   { key: 'signature', label: 'Signature', rows: 3 },
 ];
 
-/** Editable subject/body fields with save, approve, and withdraw actions. */
+/** Editable subject/body fields with a save action. */
 export function DraftEditor({
   fields,
   onChange,
-  approved,
   dirty,
   busy,
   error,
-  review,
   onSave,
-  onApprove,
-  onUnapprove,
 }: DraftEditorProps) {
-  const ready =
-    review.blockers.length === 0 &&
-    review.claims.every((claim) => review.acknowledged.includes(claim));
   return (
     <section className="reviewCard reviewEditor" aria-label="Edit email">
       <h2 className="reviewCardTitle">
         Email draft{' '}
         {dirty ? <span className="reviewDirty">· unsaved changes</span> : null}
       </h2>
-      {approved ? (
-        <p className="reviewBanner reviewBanner-approved" role="status">
-          Approved. Scheduling queues an immutable copy; later edits won&apos;t
-          change queued emails.
-        </p>
-      ) : null}
       <label className="reviewField">
         <span>Subject</span>
         <input
@@ -65,23 +51,14 @@ export function DraftEditor({
           />
         </label>
       ))}
-      <ClaimReview {...review} />
       {error !== null ? (
         <p className="reviewBanner reviewBanner-error" role="alert">
           {error}
         </p>
       ) : null}
-      <DraftActions
-        approved={approved}
-        dirty={dirty}
-        busy={busy}
-        ready={ready}
-        onSave={onSave}
-        onApprove={onApprove}
-        onUnapprove={onUnapprove}
-      />
+      <DraftActions dirty={dirty} busy={busy} onSave={onSave} />
       <p className="reviewMuted">
-        Approving does not send. Use Schedule to send.
+        Save your edits, then use Send to schedule. Saving does not send email.
       </p>
     </section>
   );

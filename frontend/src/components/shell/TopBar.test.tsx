@@ -28,7 +28,6 @@ describe('navItems', () => {
     expect(navItems.map((item) => item.label)).toEqual([
       'Companies',
       'Pipeline',
-      'Review',
       'Recipients',
       'Send',
       'Schedule',

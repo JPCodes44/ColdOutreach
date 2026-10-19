@@ -28,7 +28,7 @@ beforeEach(() => {
 const { draft } = reviewFixture();
 
 describe('DraftWorkspace', () => {
-  it('previews unsaved edits, warns on unsupported figures, and saves', async () => {
+  it('previews and saves edits without an approval step', async () => {
     render(
       <DraftWorkspace
         companyId="acme.test"
@@ -39,8 +39,8 @@ describe('DraftWorkspace', () => {
     const subject = screen.getByLabelText('Subject');
     await userEvent.clear(subject);
     await userEvent.type(subject, 'Faster replies, 40% more bookings');
-    expect(screen.getByRole('group')).toHaveTextContent('40%');
-    expect(screen.getByRole('group')).toHaveTextContent('more bookings');
+    expect(screen.queryByRole('checkbox')).toBeNull();
+    expect(screen.queryByRole('button', { name: /approv/i })).toBeNull();
     expect(
       screen.getByText(/Faster replies, 40% more bookings/, { selector: 'p' }),
     ).toBeInTheDocument();
@@ -54,63 +54,27 @@ describe('DraftWorkspace', () => {
     ]);
   });
 
-  it('approves and surfaces backend validation errors', async () => {
+  it('surfaces backend errors while saving', async () => {
     mocks.fail = 'Closing must include a conversation-starting question.';
     render(
       <DraftWorkspace companyId="acme.test" draft={draft!} evidenceText="" />,
     );
-    await userEvent.click(
-      screen.getByRole('button', { name: 'Approve for sending' }),
-    );
-    expect(mocks.calls[0]).toEqual([
-      'outreachRuns:approveDraft',
-      { companyId: 'acme.test', acknowledgedClaims: [] },
-    ]);
+    await userEvent.type(screen.getByLabelText('Subject'), '!');
+    await userEvent.click(screen.getByRole('button', { name: 'Save edits' }));
+    expect(mocks.calls[0]![0]).toBe('outreachRuns:saveDraftEdits');
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Closing must include a conversation-starting question.',
     );
   });
-
-  it('sends acknowledged claims with approval once each is confirmed', async () => {
+  it('treats legacy approved drafts as ordinary editable drafts', () => {
     render(
       <DraftWorkspace
         companyId="acme.test"
-        draft={{
-          ...draft!,
-          content: {
-            ...draft!.content,
-            opening: 'Hi,\n\nThis will boost your bookings by 30%.',
-          },
-        }}
+        draft={{ ...draft!, status: 'approved' }}
         evidenceText=""
       />,
     );
-    const approve = screen.getByRole('button', { name: 'Approve for sending' });
-    expect(approve).toBeDisabled();
-    await userEvent.click(screen.getByLabelText(/30%/));
-    expect(approve).toBeDisabled();
-    await userEvent.click(screen.getByLabelText(/boost your bookings/));
-    await userEvent.click(approve);
-    expect(mocks.calls[0]).toEqual([
-      'outreachRuns:approveDraft',
-      {
-        companyId: 'acme.test',
-        acknowledgedClaims: ['boost your bookings', '30%'],
-      },
-    ]);
-  });
-
-  it('blocks approval when the signature is empty', () => {
-    render(
-      <DraftWorkspace
-        companyId="acme.test"
-        draft={{ ...draft!, content: { ...draft!.content, signature: '' } }}
-        evidenceText=""
-      />,
-    );
-    expect(screen.getByText(/Add a signature before approving/)).toBeVisible();
-    expect(
-      screen.getByRole('button', { name: 'Approve for sending' }),
-    ).toBeDisabled();
+    expect(screen.getByLabelText('Subject')).toBeEnabled();
+    expect(screen.queryByRole('button', { name: /approv/i })).toBeNull();
   });
 });

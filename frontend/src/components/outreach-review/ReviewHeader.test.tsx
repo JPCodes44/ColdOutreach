@@ -24,7 +24,7 @@ describe('ReviewHeader', () => {
       screen.getByRole('heading', { name: 'Acme Plumbing' }),
     ).toBeInTheDocument();
     expect(screen.getByText(/1 recipient$/)).toBeInTheDocument();
-    expect(screen.getByText('Ready for review')).toBeInTheDocument();
+    expect(screen.getByText('Draft ready')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /Regenerate/ }));
     await userEvent.click(screen.getByRole('button', { name: /Back/ }));
     expect(onRun).toHaveBeenCalledTimes(1);

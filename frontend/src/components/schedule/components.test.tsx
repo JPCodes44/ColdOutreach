@@ -98,7 +98,7 @@ describe('schedule components', () => {
   it('targetStatus flags unapproved and recipient-less companies', () => {
     expect(
       targetStatus({ ...entity, status: 'Not Sent', ready: false }).label,
-    ).toBe('Not approved');
+    ).toBe('Draft not ready');
     expect(
       targetStatus({ ...entity, status: 'Not Sent', ready: false, contacts: 0 })
         .label,
@@ -109,10 +109,10 @@ describe('schedule components', () => {
   it('DispatchSummaryPanel renders counters', () => {
     render(
       <DispatchSummaryPanel
-        summary={{ totalCompanies: 3, approvedDrafts: 3, totalEmailsQueued: 6 }}
+        summary={{ totalCompanies: 3, readyDrafts: 3, totalEmailsQueued: 6 }}
       />,
     );
-    expect(screen.getByText('Total Emails Queued')).toBeInTheDocument();
+    expect(screen.getByText('Emails to Schedule')).toBeInTheDocument();
     expect(screen.getByText('6')).toBeInTheDocument();
   });
 });

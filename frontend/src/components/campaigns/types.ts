@@ -55,11 +55,13 @@ export interface CampaignHeaderProps {
   statusFilter: PipelineFilter;
   onStatusFilterChange: (value: PipelineFilter) => void;
   selectedCount: number;
+  runnableCount: number;
   running: boolean;
   websiteReviewEnabled: boolean;
   onWebsiteReviewChange: (enabled: boolean) => void;
   onRun: () => void;
   onDelete: () => void;
+  onDeleteDrafts: () => void;
 }
 
 export interface CampaignScoreProps {
@@ -82,9 +84,4 @@ export interface CampaignTableProps {
   onOpenReview: (id: string) => void;
   onToggleSelected: (id: string) => void;
   onToggleAll: () => void;
-}
-
-export interface CampaignsScreenProps {
-  /** Open the Outreach Review screen for one company. */
-  onOpenReview?: (companyId: string) => void;
 }

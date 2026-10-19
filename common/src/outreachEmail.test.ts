@@ -87,6 +87,34 @@ describe('renderOutreachHtml', () => {
   });
 });
 
+describe('letter-only emails', () => {
+  it('renders only the opening, closing, and signature in HTML and text', () => {
+    const content = makeContent({
+      format: 'letter',
+      signature: 'Best,\nJustin',
+    });
+    const rendered = renderOutreachEmail(content);
+    expect(rendered.text).toBe(
+      `${content.opening}\n\n${content.closing}\n\nBest,\nJustin\n`,
+    );
+    for (const body of [rendered.text, rendered.html]) {
+      expect(body).not.toContain(DASHBOARD_LABEL);
+      expect(body).not.toContain(content.dashboard.title);
+      expect(body).not.toContain(content.workflow[0]!.description);
+      expect(body).not.toContain(content.findings[0]!.text);
+      expect(body).toContain(content.closing);
+    }
+    expect(
+      validateOutreachContent({
+        ...content,
+        findings: [],
+        workflow: [],
+        dashboard: { title: '', metrics: [], stages: [] },
+      }),
+    ).toEqual([]);
+  });
+});
+
 describe('renderOutreachText', () => {
   it('conveys the same findings, workflow, dashboard, and question as HTML', () => {
     const content = makeContent();

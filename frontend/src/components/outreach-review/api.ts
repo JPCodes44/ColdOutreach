@@ -18,16 +18,3 @@ export const saveDraftEditsMutation = makeFunctionReference<
   },
   null
 >('outreachRuns:saveDraftEdits');
-
-/** Approve for scheduling. Approving never sends email. */
-export const approveDraftMutation = makeFunctionReference<
-  'mutation',
-  { companyId: string; acknowledgedClaims?: string[] },
-  null
->('outreachRuns:approveDraft');
-
-export const unapproveDraftMutation = makeFunctionReference<
-  'mutation',
-  { companyId: string },
-  null
->('outreachRuns:unapproveDraft');

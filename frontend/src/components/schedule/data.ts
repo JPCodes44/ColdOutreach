@@ -66,7 +66,9 @@ export function targetStatus(entity: TargetEntity): {
     return { label: 'Needs review', className: 'scheduleStatusAttention' };
   if (entity.ready === false) {
     return {
-      label: entity.contacts === 0 ? 'No recipients' : 'Not approved',
+      label:
+        entity.notReadyReason ??
+        (entity.contacts === 0 ? 'No recipients' : 'Draft not ready'),
       className: 'scheduleStatusAttention',
     };
   }

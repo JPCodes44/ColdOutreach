@@ -40,7 +40,7 @@ export function DraftReviewTable({
                   className="campaignCheckbox"
                   type="checkbox"
                   checked={allSelected}
-                  aria-label="Select all approved companies"
+                  aria-label="Select all companies with drafts"
                   onChange={onToggleAll}
                 />
               </div>

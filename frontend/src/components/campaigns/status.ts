@@ -8,8 +8,8 @@ export const draftStateThemes: Record<
 > = {
   none: { label: 'Not generated', tone: 'neutral' },
   running: { label: 'Generating', tone: 'neutral' },
-  ready: { label: 'Ready for review', tone: 'success' },
-  approved: { label: 'Approved', tone: 'success' },
+  ready: { label: 'Draft ready', tone: 'success' },
+  approved: { label: 'Draft ready', tone: 'success' },
   failed: { label: 'Failed', tone: 'danger' },
   legacy: { label: 'Legacy draft – regenerate', tone: 'danger' },
 };
@@ -26,8 +26,7 @@ export const pipelineFilterOptions: { value: PipelineFilter; label: string }[] =
   [
     { value: 'all', label: 'All' },
     { value: 'needs-run', label: 'Needs run' },
-    { value: 'ready', label: 'Ready for review' },
-    { value: 'approved', label: 'Approved' },
+    { value: 'ready', label: 'Draft ready' },
     { value: 'failed', label: 'Failed' },
   ];
 
@@ -36,6 +35,8 @@ export function matchesFilter(state: DraftState, filter: PipelineFilter) {
   switch (filter) {
     case 'all':
       return true;
+    case 'ready':
+      return state === 'ready' || state === 'approved';
     case 'needs-run':
       return state === 'none' || state === 'legacy';
     default:

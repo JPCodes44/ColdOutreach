@@ -101,6 +101,7 @@ async function generate(
   const result = await t.mutation(api.outreachRuns.requestRuns, {
     companyIds: [companyId],
     websiteReviewEnabled: true,
+    regenerate: true,
   });
   expect(result.started).toEqual([companyId]);
   const run = await t.run((ctx) =>
@@ -309,6 +310,7 @@ describe('pipeline runs and drafts', () => {
     await t.mutation(api.outreachRuns.requestRuns, {
       companyIds: ['acme.test'],
       websiteReviewEnabled: false,
+      regenerate: true,
     });
     expect((await rows())[0]).toMatchObject({
       draftState: 'running',
@@ -343,6 +345,141 @@ describe('pipeline runs and drafts', () => {
     expect(
       (await rows()).find((row) => row.id === 'failed.test'),
     ).toMatchObject({ draftState: 'failed', websiteReviewEnabled: false });
+  });
+
+  it.each(['ready', 'approved'] as const)(
+    'skips a company with a %s draft while starting missing drafts',
+    async (status) => {
+      const t = await setup();
+      await addCompany(t, 'done.test');
+      await generate(t, 'done.test');
+      if (status === 'approved') {
+        await t.mutation(api.outreachRuns.approveDraft, {
+          companyId: 'done.test',
+        });
+      }
+      await addCompany(t, 'new.test');
+      const before = await t.query(api.outreachRuns.getReview, {
+        companyId: 'done.test',
+      });
+      const result = await t.mutation(api.outreachRuns.requestRuns, {
+        companyIds: ['done.test', 'new.test'],
+      });
+      expect(result).toEqual({
+        started: ['new.test'],
+        skipped: [
+          {
+            companyId: 'done.test',
+            reason:
+              'A draft already exists. Use Regenerate in Review to replace it.',
+          },
+        ],
+      });
+      expect(
+        await t.query(api.outreachRuns.getReview, { companyId: 'done.test' }),
+      ).toEqual(before);
+      expect(
+        await t.run((ctx) => ctx.db.query('pipelineRuns').collect()),
+      ).toHaveLength(2);
+      expect(
+        await t.run((ctx) =>
+          ctx.db.system.query('_scheduled_functions').collect(),
+        ),
+      ).toHaveLength(2);
+    },
+  );
+
+  it('regenerates only on explicit request and still refuses active duplicates', async () => {
+    const t = await setup();
+    await addCompany(t, 'acme.test');
+    await generate(t, 'acme.test');
+    const request = { companyIds: ['acme.test'], regenerate: true };
+    expect(await t.mutation(api.outreachRuns.requestRuns, request)).toEqual({
+      started: ['acme.test'],
+      skipped: [],
+    });
+    expect(await t.mutation(api.outreachRuns.requestRuns, request)).toEqual({
+      started: [],
+      skipped: [
+        { companyId: 'acme.test', reason: 'A run is already in progress.' },
+      ],
+    });
+    expect(
+      await t.run((ctx) => ctx.db.query('pipelineRuns').collect()),
+    ).toHaveLength(2);
+  });
+
+  it('skips an existing draft even when the latest regeneration failed', async () => {
+    const t = await setup();
+    await addCompany(t, 'acme.test');
+    await generate(t, 'acme.test');
+    await t.run(async (ctx) => {
+      const completed = await ctx.db.query('pipelineRuns').first();
+      await ctx.db.insert('pipelineRuns', {
+        companyId: 'acme.test',
+        status: 'failed',
+        stage: 'composing',
+        settings: completed!.settings,
+        startedAt: Date.now() + 1,
+        finishedAt: Date.now() + 2,
+        error: 'Provider error',
+      });
+    });
+    const result = await t.mutation(api.outreachRuns.requestRuns, {
+      companyIds: ['acme.test'],
+    });
+    expect(result.started).toEqual([]);
+    expect(result.skipped).toEqual([
+      {
+        companyId: 'acme.test',
+        reason:
+          'A draft already exists. Use Regenerate in Review to replace it.',
+      },
+    ]);
+    expect(
+      await t.run((ctx) => ctx.db.query('pipelineRuns').collect()),
+    ).toHaveLength(2);
+  });
+
+  it('queues more than ten companies with one independent job per eligible company', async () => {
+    const t = await setup();
+    const companyIds = Array.from({ length: 25 }, (_, i) => `batch${i}.test`);
+    for (const id of companyIds) await addCompany(t, id);
+    await addCompany(t, 'busy.test');
+    await t.mutation(api.outreachRuns.requestRuns, {
+      companyIds: ['busy.test'],
+    });
+
+    const result = await t.mutation(api.outreachRuns.requestRuns, {
+      companyIds: [...companyIds, companyIds[0]!, 'busy.test', 'missing.test'],
+      websiteReviewEnabled: true,
+    });
+    expect(result).toEqual({
+      started: companyIds,
+      skipped: [
+        { companyId: 'busy.test', reason: 'A run is already in progress.' },
+        { companyId: 'missing.test', reason: 'Company not found.' },
+      ],
+    });
+    const runs = await t.run((ctx) => ctx.db.query('pipelineRuns').collect());
+    expect(runs).toHaveLength(26);
+    for (const companyId of companyIds) {
+      expect(runs.filter((run) => run.companyId === companyId)).toEqual([
+        expect.objectContaining({
+          status: 'running',
+          stage: 'queued',
+          websiteReviewEnabled: true,
+        }),
+      ]);
+    }
+    const jobs = await t.run((ctx) =>
+      ctx.db.system.query('_scheduled_functions').collect(),
+    );
+    expect(jobs).toHaveLength(26);
+    expect(new Set(jobs.map((job) => job.args[0].runId))).toEqual(
+      new Set(runs.map((run) => run._id)),
+    );
+    expect(await queueRows(t)).toHaveLength(0);
   });
 
   it('snapshots the settings version and refuses a concurrent run', async () => {
@@ -426,6 +563,7 @@ describe('pipeline runs and drafts', () => {
     vi.setSystemTime(Date.now() + 1000);
     await t.mutation(api.outreachRuns.requestRuns, {
       companyIds: ['acme.test'],
+      regenerate: true,
     });
     const stuck = await t.run((ctx) =>
       ctx.db
@@ -437,6 +575,7 @@ describe('pipeline runs and drafts', () => {
     vi.setSystemTime(Date.now() + 11 * 60 * 1000);
     await t.mutation(api.outreachRuns.requestRuns, {
       companyIds: ['acme.test'],
+      regenerate: true,
     });
     expect((await t.run((ctx) => ctx.db.get(stuck!._id)))?.status).toBe(
       'failed',
@@ -498,6 +637,166 @@ describe('pipeline runs and drafts', () => {
   });
 });
 
+describe('delete drafts', () => {
+  it('deletes only selected drafts, preserving companies, recipients, research, and run history', async () => {
+    const t = await setup();
+    await approved(t, 'acme.test');
+    await approved(t, 'other.test');
+    const company = await t.run((ctx) =>
+      ctx.db
+        .query('companies')
+        .withIndex('by_externalId', (q) => q.eq('externalId', 'acme.test'))
+        .unique(),
+    );
+    await t.run((ctx) =>
+      ctx.db.patch(company!._id, {
+        description: 'Manufactures food ingredients.',
+      }),
+    );
+    const before = await t.run((ctx) => ctx.db.query('pipelineRuns').collect());
+    expect(
+      await t.mutation(api.outreachRuns.deleteDrafts, {
+        companyIds: ['acme.test', 'acme.test', 'missing.test'],
+      }),
+    ).toEqual({ deleted: 1 });
+    expect(
+      (await t.query(api.outreachRuns.getReview, { companyId: 'acme.test' }))
+        ?.draft,
+    ).toBeNull();
+    expect(
+      (await t.query(api.outreachRuns.listPipelineCompanies, {})).find(
+        (row) => row.id === 'acme.test',
+      )?.draftState,
+    ).toBe('none');
+    expect(
+      (await t.query(api.outreachRuns.getReview, { companyId: 'other.test' }))
+        ?.draft,
+    ).not.toBeNull();
+    const kept = await t.run((ctx) => ctx.db.get(company!._id));
+    expect(kept).toMatchObject({
+      email1: 'owner@acme.test',
+      description: 'Manufactures food ingredients.',
+    });
+    expect(
+      await t.run((ctx) => ctx.db.query('pipelineRuns').collect()),
+    ).toEqual(before);
+    expect(
+      await t.mutation(api.outreachRuns.deleteDrafts, {
+        companyIds: ['acme.test'],
+      }),
+    ).toEqual({ deleted: 0 });
+  });
+
+  it('refuses the whole selection if a company has an active send', async () => {
+    const t = await setup();
+    await approved(t, 'free.test');
+    await approved(t, 'queued.test');
+    await enqueue(t, ['queued.test']);
+    await expect(
+      t.mutation(api.outreachRuns.deleteDrafts, {
+        companyIds: ['free.test', 'queued.test'],
+      }),
+    ).rejects.toThrow(/sends queued/);
+    expect(
+      (await t.query(api.outreachRuns.getReview, { companyId: 'free.test' }))
+        ?.draft,
+    ).not.toBeNull();
+    expect(
+      (await t.query(api.outreachRuns.getReview, { companyId: 'queued.test' }))
+        ?.draft,
+    ).not.toBeNull();
+  });
+
+  it('refuses deletion during active generation', async () => {
+    const t = await setup();
+    await approved(t, 'acme.test');
+    await t.mutation(api.outreachRuns.requestRuns, {
+      companyIds: ['acme.test'],
+      regenerate: true,
+    });
+    await expect(
+      t.mutation(api.outreachRuns.deleteDrafts, { companyIds: ['acme.test'] }),
+    ).rejects.toThrow(/generation is in progress/);
+    expect(
+      (await t.query(api.outreachRuns.getReview, { companyId: 'acme.test' }))
+        ?.draft,
+    ).not.toBeNull();
+  });
+
+  it('prevents an abandoned run from restoring a deleted draft', async () => {
+    const t = await setup();
+    await approved(t, 'acme.test');
+    const completed = await t.run((ctx) =>
+      ctx.db.query('pipelineRuns').first(),
+    );
+    const staleId = await t.run((ctx) =>
+      ctx.db.insert('pipelineRuns', {
+        companyId: 'acme.test',
+        status: 'running',
+        stage: 'composing',
+        startedAt: Date.now() - 11 * 60 * 1000,
+        settings: completed!.settings,
+      }),
+    );
+    await t.mutation(api.outreachRuns.deleteDrafts, {
+      companyIds: ['acme.test'],
+    });
+    expect(
+      await t.mutation(internal.outreachRuns.completeRun, {
+        runId: staleId,
+        evidence: EVIDENCE,
+        analysis: ANALYSIS,
+        content: CONTENT,
+        model: 'test-model',
+      }),
+    ).toEqual({ appliedToDraft: false });
+    expect(
+      (await t.query(api.outreachRuns.getReview, { companyId: 'acme.test' }))
+        ?.draft,
+    ).toBeNull();
+  });
+});
+
+describe('research-only email format', () => {
+  it('removes supplemental sections from existing drafts in review and future send snapshots', async () => {
+    const t = await setup();
+    await addCompany(t, 'acme.test');
+    await t.mutation(api.outreachRuns.requestRuns, {
+      companyIds: ['acme.test'],
+      websiteReviewEnabled: false,
+    });
+    const run = await t.run((ctx) => ctx.db.query('pipelineRuns').first());
+    await t.mutation(internal.outreachRuns.completeRun, {
+      runId: run!._id,
+      evidence: EVIDENCE,
+      analysis: ANALYSIS,
+      content: CONTENT,
+      model: 'test-model',
+    });
+    const review = await t.query(api.outreachRuns.getReview, {
+      companyId: 'acme.test',
+    });
+    expect(review?.draft?.content).toMatchObject({
+      format: 'letter',
+      findings: [],
+      workflow: [],
+      dashboard: { metrics: [] },
+      closing: CONTENT.closing,
+      signature: CONTENT.signature,
+    });
+    await t.mutation(api.outreachRuns.approveDraft, { companyId: 'acme.test' });
+    await enqueue(t, ['acme.test']);
+    const rows = await queueRows(t);
+    for (const body of [rows[0]!.snapshot!.text, rows[0]!.snapshot!.html]) {
+      expect(body).not.toMatch(
+        /ILLUSTRATIVE DASHBOARD|Illustrative dashboard|Proposed lead-response|PROPOSED LEAD-RESPONSE/,
+      );
+      expect(body).not.toContain(CONTENT.dashboard.title);
+      expect(body).toContain(CONTENT.closing);
+    }
+  });
+});
+
 describe('approval checks', () => {
   it('refuses a draft without a signature', async () => {
     const t = await setup();
@@ -547,24 +846,69 @@ describe('approval checks', () => {
   });
 });
 
-describe('queueing approved snapshots', () => {
-  it('requires an approved draft and valid recipients', async () => {
+describe('queueing saved drafts', () => {
+  it('can schedule a generated draft after edits with no approval step', async () => {
+    const t = await setup();
+    await addCompany(t, 'acme.test');
+    await generate(t, 'acme.test');
+    await t.mutation(api.outreachRuns.saveDraftEdits, {
+      companyId: 'acme.test',
+      subject: 'My saved edits',
+      opening: CONTENT.opening,
+      closing: CONTENT.closing,
+      signature: CONTENT.signature,
+    });
+    const summary = await t.query(api.send.getScheduleSummary, {
+      companyIds: ['acme.test'],
+    });
+    expect(summary).toMatchObject({ readyDrafts: 1, totalEmailsQueued: 1 });
+    expect(summary.entities[0]).toMatchObject({
+      ready: true,
+      draftState: 'ready',
+    });
+    await enqueue(t, ['acme.test']);
+    expect((await queueRows(t))[0]!.snapshot!.subject).toBe('My saved edits');
+  });
+
+  it('blocks missing signatures and incomplete drafts without an approval gate', async () => {
+    const t = await setup();
+    await addCompany(t, 'no-signature.test');
+    await generate(t, 'no-signature.test', { ...CONTENT, signature: '' });
+    expect(
+      (
+        await t.query(api.send.getScheduleSummary, {
+          companyIds: ['no-signature.test'],
+        })
+      ).entities[0],
+    ).toMatchObject({ ready: false, notReadyReason: 'Missing signature' });
+    await expect(enqueue(t, ['no-signature.test'])).rejects.toThrow(
+      /signature before sending/,
+    );
+    await addCompany(t, 'incomplete.test');
+    await generate(t, 'incomplete.test', { ...CONTENT, subject: '' });
+    await expect(enqueue(t, ['incomplete.test'])).rejects.toThrow(
+      /Subject is empty/,
+    );
+    expect(await queueRows(t)).toHaveLength(0);
+  });
+
+  it('requires a generated draft and valid recipients, without approval', async () => {
     const t = await setup();
     await addCompany(t, 'acme.test');
     await expect(enqueue(t, ['acme.test'])).rejects.toThrow(
-      'generate and approve',
+      'generate an outreach draft',
     );
     await generate(t, 'acme.test');
-    await expect(enqueue(t, ['acme.test'])).rejects.toThrow(
-      'approve the reviewed draft',
-    );
+    await expect(enqueue(t, ['acme.test'])).resolves.toMatchObject({
+      queued: 1,
+    });
     await addCompany(t, 'bad.test', ['not-an-email']);
     await generate(t, 'bad.test');
     await t.mutation(api.outreachRuns.approveDraft, { companyId: 'bad.test' });
     await expect(enqueue(t, ['bad.test'])).rejects.toThrow('Invalid recipient');
     await addCompany(t, 'none.test', []);
     await expect(enqueue(t, ['none.test'])).rejects.toThrow('no recipient');
-    expect(await queueRows(t)).toHaveLength(0);
+    expect(await queueRows(t)).toHaveLength(1);
   });
 
   it('keeps the queued content immutable after edits, regeneration, and Settings changes', async () => {
@@ -596,6 +940,143 @@ describe('queueing approved snapshots', () => {
     const [after] = await queueRows(t);
     expect(after!.snapshot).toEqual(before!.snapshot);
     expect(after!.subject).toBe('An idea for Acme inquiries');
+  });
+
+  it.each(['queued', 'sending', 'uncertain'] as const)(
+    'excludes %s sends from readiness while allowing the other companies to queue',
+    async (status) => {
+      const t = await setup();
+      await approved(t, 'acme.test');
+      await enqueue(t, ['acme.test']);
+      const original = (await queueRows(t))[0]!;
+      if (status !== 'queued') {
+        await t.mutation(internal.send.claimQueueItem, {
+          itemId: original._id,
+        });
+      }
+      if (status === 'uncertain') {
+        await t.mutation(internal.send.markQueueItemUncertain, {
+          itemId: original._id,
+          error: 'Connection lost after submission',
+        });
+      }
+      await approved(t, 'fresh.test');
+      const summary = await t.query(api.send.getScheduleSummary, {
+        companyIds: ['acme.test', 'fresh.test', 'fresh.test'],
+      });
+      expect(summary).toMatchObject({
+        totalCompanies: 2,
+        readyDrafts: 1,
+        totalEmailsQueued: 1,
+      });
+      expect(summary.entities[0]).toMatchObject({
+        ready: false,
+        notReadyReason:
+          'ACME already has outreach queued, sending, or awaiting review.',
+      });
+      expect(summary.entities[1]).toMatchObject({
+        id: 'fresh.test',
+        ready: true,
+      });
+      await enqueue(
+        t,
+        summary.entities
+          .filter((entity) => entity.ready)
+          .map((entity) => entity.id),
+      );
+      const after = await queueRows(t);
+      expect(after).toHaveLength(2);
+      expect(after.find((item) => item._id === original._id)?.status).toBe(
+        status,
+      );
+    },
+  );
+
+  it('excludes previously contacted companies and recipients from the schedule preview', async () => {
+    const t = await setup();
+    await approved(t, 'sent.test');
+    await enqueue(t, ['sent.test']);
+    const item = (await queueRows(t))[0]!;
+    await t.mutation(internal.send.claimQueueItem, { itemId: item._id });
+    await t.mutation(internal.send.markQueueItemSent, { itemId: item._id });
+    await addCompany(t, 'other.test', ['owner@sent.test']);
+    await generate(t, 'other.test');
+    const summary = await t.query(api.send.getScheduleSummary, {
+      companyIds: ['sent.test', 'other.test'],
+    });
+    expect(summary).toMatchObject({ readyDrafts: 0, totalEmailsQueued: 0 });
+    expect(summary.entities[0]).toMatchObject({
+      ready: false,
+      notReadyReason: 'Company already contacted: SENT',
+    });
+    expect(summary.entities[1]).toMatchObject({
+      ready: false,
+      notReadyReason: 'Recipient already contacted: owner@sent.test',
+    });
+  });
+
+  it('excludes recipients reserved by another company and makes canceled sends eligible again', async () => {
+    const t = await setup();
+    await approved(t, 'acme.test');
+    await enqueue(t, ['acme.test']);
+    await addCompany(t, 'other.test', ['owner@acme.test']);
+    await generate(t, 'other.test');
+    const summary = await t.query(api.send.getScheduleSummary, {
+      companyIds: ['other.test'],
+    });
+    expect(summary.entities[0]).toMatchObject({
+      ready: false,
+      notReadyReason: 'Recipient already has a pending send: owner@acme.test',
+    });
+    await t.mutation(api.send.cancelScheduledSends, {
+      companyIds: ['acme.test'],
+    });
+    const after = await t.query(api.send.getScheduleSummary, {
+      companyIds: ['other.test'],
+    });
+    expect(after).toMatchObject({ readyDrafts: 1, totalEmailsQueued: 1 });
+  });
+
+  it('detects duplicate domains and addresses within the selected batch before enabling scheduling', async () => {
+    const t = await setup();
+    await approved(t, 'first.test');
+    await addCompany(t, 'duplicate-domain.test');
+    await generate(t, 'duplicate-domain.test');
+    await t.run(async (ctx) => {
+      const company = await ctx.db
+        .query('companies')
+        .withIndex('by_externalId', (q) =>
+          q.eq('externalId', 'duplicate-domain.test'),
+        )
+        .unique();
+      await ctx.db.patch(company!._id, { domain: 'first.test' });
+    });
+    await addCompany(t, 'duplicate-email.test', ['owner@first.test']);
+    await generate(t, 'duplicate-email.test');
+    const summary = await t.query(api.send.getScheduleSummary, {
+      companyIds: [
+        'first.test',
+        'duplicate-domain.test',
+        'duplicate-email.test',
+      ],
+    });
+    expect(summary).toMatchObject({ readyDrafts: 1, totalEmailsQueued: 1 });
+    expect(summary.entities[1]).toMatchObject({
+      ready: false,
+      notReadyReason: 'Company appears more than once: first.test',
+    });
+    expect(summary.entities[2]).toMatchObject({
+      ready: false,
+      notReadyReason: 'Duplicate recipient in batch: owner@first.test',
+    });
+    await expect(
+      enqueue(
+        t,
+        summary.entities
+          .filter((entity) => entity.ready)
+          .map((entity) => entity.id),
+      ),
+    ).resolves.toMatchObject({ queued: 1 });
   });
 
   it('prevents duplicate queueing of a company or recipient', async () => {
@@ -910,7 +1391,7 @@ describe('legacy job-application data', () => {
     expect(await t.query(api.send.listSentEmails, {})).toEqual([]);
     // Legacy drafts are never offered for sending.
     await expect(enqueue(t, ['old.test'])).rejects.toThrow(
-      'generate and approve',
+      'generate an outreach draft',
     );
   });
 });

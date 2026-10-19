@@ -1,9 +1,9 @@
 .emailTableScreen {
   display: flex;
-  flex: 1;
+  flex: 1 0 auto;
   flex-direction: column;
-  min-height: 0;
-  height: 100%;
+  min-height: 100%;
+  height: auto;
   background: #f7f9fb;
 }
 
@@ -44,9 +44,9 @@
 }
 
 .emailTableCanvas {
-  flex: 1;
-  min-height: 0;
-  padding: 16px;
+  flex: 1 0 auto;
+  min-height: 360px;
+  padding: 24px 16px 16px;
   overflow: hidden;
   background: #f2f4f6;
 }
@@ -160,16 +160,17 @@
   opacity: 0.45;
 }
 
+/* The page owns vertical scrolling; let the grid grow to fit every row. */
 .emailSpreadsheetShell {
-  flex: 1;
+  flex: 1 0 auto;
   min-height: 0;
   padding-bottom: 1px;
-  overflow: hidden;
+  overflow-x: auto;
 }
 
 .emailHotTable {
   width: 100%;
-  height: 100%;
+  height: auto;
 }
 
 .emailHotTable .handsontable {
@@ -213,4 +214,120 @@
     -apple-system,
     sans-serif;
   color: #434655;
+}
+
+.emailEnrichmentPanel {
+  margin: 0 16px;
+  padding: 16px;
+  border: 1px solid var(--color-border, #c5cbd7);
+  border-radius: 8px;
+  background: var(--color-surface, #fff);
+  font-size: 13px;
+}
+.emailEnrichmentPanel p {
+  margin: 0 0 12px;
+}
+.emailEnrichmentControls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.emailEnrichmentControls label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.emailEnrichmentControls label:first-child {
+  flex: 1 1 360px;
+}
+.emailEnrichmentControls input,
+.emailEnrichmentControls select {
+  min-height: 36px;
+  padding: 6px 10px;
+  border: 1px solid #c5cbd7;
+  border-radius: 4px;
+  font: inherit;
+  background: #fff;
+  color: inherit;
+}
+.emailEnrichmentFill {
+  min-height: 36px;
+  padding: 8px 14px;
+  border: 1px solid #0057d9;
+  border-radius: 5px;
+  background: #0057d9;
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+.emailEnrichmentFill:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.emailEnrichmentPanel details {
+  max-height: 180px;
+  overflow: auto;
+}
+
+.emailResearchInfo {
+  margin: 16px;
+  padding: 16px;
+  border: 1px solid #b4c5ff;
+  border-radius: 8px;
+  background: #f4f7ff;
+  color: #191c1e;
+  font:
+    400 13px/20px Inter,
+    system-ui,
+    sans-serif;
+}
+
+.emailResearchInfo h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  line-height: 24px;
+}
+
+.emailResearchInfo p {
+  margin: 0 0 12px;
+}
+
+.emailResearchInfo textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid #c5cbd7;
+  border-radius: 4px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+}
+
+.emailResearchInfo textarea {
+  resize: vertical;
+}
+
+.emailResearchInfo textarea:focus-visible {
+  outline: 2px solid #004ac6;
+  outline-offset: 2px;
+}
+
+.emailResearchActions {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.emailResearchInfo summary {
+  cursor: pointer;
+  color: #004ac6;
+}
+
+.emailResearchPrompt {
+  margin-top: 10px;
 }

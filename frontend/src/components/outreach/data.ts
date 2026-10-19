@@ -25,10 +25,10 @@ export const industryOptions: SelectOption[] = [
 
 export const companySizeOptions: SelectOption[] = [
   { value: 'any', label: 'Any Size' },
-  { value: '1-50', label: '1-50 Employees' },
-  { value: '51-200', label: '51-200 Employees' },
-  { value: '201-1000', label: '201-1000 Employees' },
-  { value: '1000+', label: '1000+ Employees' },
+  { value: 'small', label: 'Small' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'large', label: 'Large' },
+  { value: 'megacorp', label: 'Megacorp' },
 ];
 
 export const locationOptions: string[] = [

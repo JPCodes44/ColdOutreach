@@ -10,11 +10,22 @@ export const statusOptions: SelectOption[] = [
   { value: 'Needs Review', label: 'Needs Review' },
 ];
 
-export const NOT_APPROVED_HINT = 'Approve the draft in Review first';
+export const DRAFT_REQUIRED_HINT = 'Generate a draft in Pipeline first';
 
-/** Only companies with an approved draft can be sent. */
+/** Explain why a row cannot be selected for another send. */
+export function sendBlockHint(row: CompanyEmailRow): string | undefined {
+  if (row.draftState !== 'ready' && row.draftState !== 'approved')
+    return DRAFT_REQUIRED_HINT;
+  if (row.status === 'Sent') return 'Already sent';
+  if (row.status === 'Sending') return 'Already queued or sending';
+  if (row.status === 'Needs Review')
+    return 'Resolve the delivery status in History first';
+  return undefined;
+}
+
+/** Generated drafts can be sent once, without a separate approval step. */
 export function isSendable(row: CompanyEmailRow): boolean {
-  return row.draftState === 'approved';
+  return sendBlockHint(row) === undefined;
 }
 
 /** Show an email address, or a dash when that slot is empty. */

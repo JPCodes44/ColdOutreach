@@ -180,12 +180,15 @@ describe('runOutreachPipeline', () => {
       expect(prompt.system).toContain(
         'Nanotechnology Engineering at the University of Waterloo',
       );
+      expect(prompt.system).toContain('hardware R&D and materials science');
       expect(prompt.system).toContain(
-        'digital-health startup that raised approximately $2M',
+        'standard operating procedures (SOPs), and turning R&D findings and those procedures into software automations',
       );
       expect(prompt.system).toContain(
-        'logistics, using data to investigate operational bottlenecks',
+        'I’ve also worked in logistics, using data to investigate operational bottlenecks.',
       );
+      expect(prompt.system).not.toContain('$2M');
+      expect(prompt.system).not.toContain('digital-health startup');
       expect(prompt.system).toContain(
         'adapt the sector and business-type wording',
       );
@@ -204,7 +207,7 @@ describe('runOutreachPipeline', () => {
       observationParagraph:
         'I came across your company while learning about dental services.',
       opportunityParagraph:
-        'My background includes Nanotechnology Engineering at the University of Waterloo and a digital-health startup that raised approximately $2M.',
+        'My background is in Nanotechnology Engineering at the University of Waterloo, with experience in hardware R&D and materials science, developing standard operating procedures (SOPs), and turning R&D findings and those procedures into software automations.',
       solutionParagraph:
         'I would love to learn where repetitive work takes up your team’s time.',
       question:
@@ -219,8 +222,13 @@ describe('runOutreachPipeline', () => {
     const result = await runOutreachPipeline(COMPANY, SETTINGS, deps, {
       websiteReviewEnabled: false,
     });
-    expect(result.content.opening).toContain('$2M');
-    expect(result.evidence.researchContext).toContain('$2M');
+    expect(result.content.opening).toContain(
+      'hardware R&D and materials science',
+    );
+    expect(result.evidence.researchContext).toContain(
+      'standard operating procedures (SOPs), and turning R&D findings and those procedures into software automations',
+    );
+    expect(result.evidence.researchContext).not.toContain('$2M');
     const invented = fakeDeps([
       { ...draft, solutionParagraph: 'Your company loses $50,000.' },
       { ...draft, solutionParagraph: 'Your company loses $50,000.' },
@@ -230,6 +238,67 @@ describe('runOutreachPipeline', () => {
         websiteReviewEnabled: false,
       }),
     ).rejects.toThrow(/company research.*does not support/);
+    const oldBackground = {
+      ...draft,
+      opportunityParagraph:
+        'I worked at a digital-health startup that raised approximately $2M.',
+    };
+    const outdated = fakeDeps([oldBackground, oldBackground]);
+    await expect(
+      runOutreachPipeline(COMPANY, SETTINGS, outdated.deps, {
+        websiteReviewEnabled: false,
+      }),
+    ).rejects.toThrow(/company research.*does not support/);
+  });
+
+  it('requires the tools paragraph to name the researched sector instead of generic wording', () => {
+    const prompt = buildResearchCompositionPrompt(
+      {
+        ...COMPANY,
+        industry: 'Grains & pulses',
+        description:
+          'Processes oats and pulses into ingredients for food manufacturers.',
+      },
+      SETTINGS,
+    );
+    expect(prompt.user).toContain(
+      'Processes oats and pulses into ingredients for food manufacturers.',
+    );
+    expect(prompt.system).toContain('REQUIRED SECTOR IN THE TOOLS PARAGRAPH');
+    expect(prompt.system).toContain('Never substitute "businesses like yours"');
+    expect(prompt.system).toContain('for grain and pulse processors');
+    expect(prompt.system).toContain(
+      'Before returning, check solutionParagraph',
+    );
+    expect(prompt.system).not.toContain(
+      'If the sector is unknown, use neutral wording',
+    );
+  });
+
+  it('retries generic tools paragraphs instead of saving businesses-like-yours wording', async () => {
+    const generic = {
+      ...COMPOSITION,
+      solutionParagraph:
+        'I’m exploring opportunities to build practical tools for businesses like yours and would love to learn from your experience.',
+    };
+    const specific = {
+      ...COMPOSITION,
+      solutionParagraph:
+        'I’m exploring opportunities to build practical tools for dental practices and would love to learn from your experience.',
+    };
+    const { deps, prompts } = fakeDeps([generic, specific]);
+    const result = await runOutreachPipeline(COMPANY, SETTINGS, deps, {
+      websiteReviewEnabled: false,
+    });
+    expect(prompts).toHaveLength(2);
+    expect(prompts[1]!.user).toContain('explicitly name the sector');
+    expect(result.content.opening).toContain('for dental practices');
+    const repeated = fakeDeps([generic, generic]);
+    await expect(
+      runOutreachPipeline(COMPANY, SETTINGS, repeated.deps, {
+        websiteReviewEnabled: false,
+      }),
+    ).rejects.toThrow(/generic sector wording/);
   });
 
   it('personalizes from the researched description and excludes legacy segment labels', () => {
@@ -295,6 +364,11 @@ describe('runOutreachPipeline', () => {
     expect(prompts[0]!.system).not.toContain(
       'Every observation and opportunity must cite',
     );
+    expect(result.content.format).toBe('letter');
+    expect(result.content.workflow).toEqual([]);
+    expect(result.content.dashboard.metrics).toEqual([]);
+    expect(prompts[0]!.system).not.toContain('- proposedWorkflow:');
+    expect(prompts[0]!.system).not.toContain('- dashboard:');
     expect(result.evidence.facts).toEqual([]);
     expect(result.evidence.sources).toEqual([]);
     expect(result.analysis.observations).toEqual([]);
@@ -358,7 +432,9 @@ describe('runOutreachPipeline', () => {
       runOutreachPipeline(COMPANY, SETTINGS, invalid.deps, {
         websiteReviewEnabled: false,
       }),
-    ).rejects.toThrow(/incomplete workflow or dashboard/);
+    ).resolves.toMatchObject({
+      content: { format: 'letter', workflow: [], dashboard: { metrics: [] } },
+    });
   });
 
   it('omits extra dashboard commentary and fills the research-only signature when blank', async () => {
@@ -393,10 +469,19 @@ describe('runOutreachPipeline', () => {
     expect(result.content.signature).toBe('Best,\nJustin');
     expect(prompts[0]!.system).toContain('Do not add extra paragraphs');
     expect(prompts[0]!.system).toContain(
-      'dashboardIntro: return an empty string',
+      'Do not generate dashboardIntro, proposedWorkflow, dashboard',
     );
     expect(renderOutreachEmail(result.content).text).toContain('Best,\nJustin');
-    expect(result.content.dashboard.metrics).not.toHaveLength(0);
+    expect(result.content.format).toBe('letter');
+    expect(result.content.dashboard.metrics).toHaveLength(0);
+    expect(result.content.workflow).toEqual([]);
+    const rendered = renderOutreachEmail(result.content);
+    expect(rendered.text).not.toMatch(
+      /ILLUSTRATIVE DASHBOARD|PROPOSED LEAD-RESPONSE WORKFLOW/,
+    );
+    expect(rendered.html).not.toMatch(
+      /Illustrative dashboard concept|Proposed lead-response workflow/,
+    );
     const saved = fakeDeps([{ ...draft, dashboardIntro: '' }]);
     const savedResult = await runOutreachPipeline(
       COMPANY,

@@ -66,22 +66,20 @@ describe('DraftReviewScreen', () => {
     expect(screen.getByText('Loading…')).toBeInTheDocument();
   });
 
-  it('only lets approved drafts be selected and sent', async () => {
+  it('lets generated drafts be selected and sent without approval', async () => {
     const onContinue = vi.fn();
     render(<DraftReviewScreen onContinue={onContinue} />);
-    expect(screen.getByLabelText('Select Beta')).toBeDisabled();
-    expect(
-      screen.getByText('Approve the draft in Review first'),
-    ).toBeInTheDocument();
+    expect(screen.getByLabelText('Select Beta')).toBeEnabled();
+    expect(screen.queryByText('Approve the draft in Review first')).toBeNull();
     const continueButton = screen.getByRole('button', {
       name: /Continue to Schedule/,
     });
     expect(continueButton).toBeDisabled();
     await userEvent.click(
-      screen.getByLabelText('Select all approved companies'),
+      screen.getByLabelText('Select all companies with drafts'),
     );
     await userEvent.click(continueButton);
-    expect(onContinue).toHaveBeenCalledWith(['acme.test']);
+    expect(onContinue).toHaveBeenCalledWith(['acme.test', 'beta.test']);
   });
 
   it('opens the per-recipient preview without résumé attachments', async () => {

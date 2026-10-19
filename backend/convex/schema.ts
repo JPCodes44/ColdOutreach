@@ -4,6 +4,7 @@ import { v } from 'convex/values';
 
 /** Structured, editable outreach email content (mirrors `OutreachEmailContent`). */
 export const outreachContentValidator = v.object({
+  format: v.optional(v.literal('letter')),
   subject: v.string(),
   opening: v.string(),
   findings: v.array(v.object({ text: v.string(), sourceUrl: v.string() })),
@@ -104,6 +105,12 @@ export const queueStatusValidator = v.union(
 
 export default defineSchema({
   ...authTables,
+  /** Onboarding contact only; mailbox ownership and integrations are unverified. */
+  emailOnboarding: defineTable({
+    userId: v.id('users'),
+    email: v.string(),
+    updatedAt: v.string(),
+  }).index('by_user', ['userId']),
   /**
    * Legacy job-application artifacts (cold email + résumé). Retained only so
    * existing documents stay valid; nothing reads, displays, or sends them.
@@ -134,6 +141,35 @@ export default defineSchema({
     /** Legacy classification; no longer used for discovery display or drafting. */
     segment: v.optional(v.string()),
     /** Up to three manually-entered recipient emails for the outreach. */
+    recipientEnrichment: v.optional(
+      v.object({
+        token: v.string(),
+        startedAt: v.number(),
+        status: v.union(
+          v.literal('running'),
+          v.literal('done'),
+          v.literal('failed'),
+        ),
+        message: v.string(),
+        creditsConsumed: v.optional(v.number()),
+      }),
+    ),
+    apolloContacts: v.optional(
+      v.array(
+        v.object({
+          slot: v.union(
+            v.literal('email1'),
+            v.literal('email2'),
+            v.literal('email3'),
+          ),
+          apolloId: v.string(),
+          name: v.string(),
+          title: v.string(),
+          email: v.string(),
+          role: v.union(v.literal('management'), v.literal('specialist')),
+        }),
+      ),
+    ),
     email1: v.optional(v.string()),
     email2: v.optional(v.string()),
     email3: v.optional(v.string()),
@@ -196,6 +232,7 @@ export default defineSchema({
     settingsVersion: v.number(),
     content: outreachContentValidator,
     status: v.union(v.literal('ready'), v.literal('approved')),
+    /** Legacy approval metadata; no longer required for sending. */
     approvedAt: v.optional(v.string()),
     /** Flagged claims the reviewer explicitly accepted when approving. */
     acknowledgedClaims: v.optional(v.array(v.string())),
@@ -243,7 +280,7 @@ export default defineSchema({
   /**
    * The send queue: one row per recipient. Active rows (queued, sending,
    * uncertain) double as the recipient reservation. `snapshot` is the
-   * immutable approved content; later edits never change it.
+   * immutable saved content; later edits never change it.
    */
   sendQueue: defineTable({
     batchId: v.string(),

@@ -32,7 +32,7 @@ function matches(row: CompanyEmailRow, term: string, status: string): boolean {
   );
 }
 
-/** Choose companies with approved drafts to schedule for sending. */
+/** Choose companies with generated drafts to schedule for sending. */
 export function DraftReviewScreen({
   onContinue,
   onBack,
@@ -60,7 +60,7 @@ export function DraftReviewScreen({
     .map((row) => row.companyId);
   const allSelected =
     sendableIds.length > 0 && sendableIds.every((id) => selectedIds.has(id));
-  // Only approved companies that are still listed can be sent.
+  // Only companies with generated drafts that are still listed can be sent.
   const chosen = (rows ?? [])
     .filter((r) => isSendable(r) && selectedIds.has(r.companyId))
     .map((r) => r.companyId);
@@ -70,8 +70,8 @@ export function DraftReviewScreen({
       <div className="draftHeader">
         <h1 className="draftTitle">Choose Companies to Send</h1>
         <p className="draftSubtitle">
-          Select companies whose reviewed draft is approved. Click a row to
-          preview each recipient&apos;s email.
+          Select companies with generated drafts. Click a row to preview each
+          recipient&apos;s email.
         </p>
       </div>
       <DraftReviewHeader

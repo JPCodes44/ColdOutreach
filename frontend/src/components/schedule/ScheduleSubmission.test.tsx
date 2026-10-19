@@ -34,12 +34,12 @@ const readySummary: ScheduleSummary = {
       segment: 'Dental',
       contacts: 2,
       status: 'Not Sent',
-      draftState: 'approved',
+      draftState: 'ready',
       ready: true,
     },
   ],
   totalCompanies: 1,
-  approvedDrafts: 1,
+  readyDrafts: 1,
   totalEmailsQueued: 2,
 };
 
@@ -58,12 +58,12 @@ describe('ScheduleSubmissionScreen', () => {
       screen.getByRole('radio', { name: /Immediate Send/ }),
     ).toHaveAttribute('aria-checked', 'true');
     expect(
-      screen.getByText(/immutable copy of the approved draft/),
+      screen.getByText(/immutable copy of the saved draft/),
     ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /as Drafts/ })).toBeNull();
   });
 
-  it('schedules approved companies and reports the queued count', async () => {
+  it('schedules generated companies without approval and reports the queued count', async () => {
     render(<ScheduleSubmissionScreen companyIds={['acme.test']} />);
     mocks.mutations['send:enqueueSend']!.mockResolvedValue({
       batchId: 'b',
@@ -98,7 +98,7 @@ describe('ScheduleSubmissionScreen', () => {
     ).toBeInTheDocument();
   });
 
-  it('blocks scheduling when a selected company is not approved', () => {
+  it('schedules the eligible subset when another selected company is blocked', async () => {
     mocks.summary = {
       ...readySummary,
       entities: [
@@ -109,20 +109,48 @@ describe('ScheduleSubmissionScreen', () => {
           initial: 'B',
           segment: 'x',
           contacts: 1,
-          draftState: 'ready',
+          draftState: 'none',
           ready: false,
         },
       ],
       totalCompanies: 2,
     };
     render(<ScheduleSubmissionScreen companyIds={['acme.test', 'b']} />);
+    mocks.mutations['send:enqueueSend']!.mockResolvedValue({
+      batchId: 'b',
+      queued: 2,
+    });
+    const schedule = screen.getByRole('button', { name: /Schedule Outreach/ });
+    expect(schedule).toBeEnabled();
+    expect(screen.getByText('Draft not ready')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Only eligible companies will be scheduled/),
+    ).toBeInTheDocument();
+    await userEvent.click(schedule);
+    expect(mocks.mutations['send:enqueueSend']).toHaveBeenCalledWith(
+      expect.objectContaining({ companyIds: ['acme.test'] }),
+    );
+  });
+
+  it('disables scheduling when every selected company already has an active send', () => {
+    mocks.summary = {
+      ...readySummary,
+      readyDrafts: 0,
+      totalEmailsQueued: 0,
+      entities: [
+        {
+          ...readySummary.entities[0],
+          status: 'Sending',
+          ready: false,
+          notReadyReason: 'Already queued',
+        },
+      ],
+    };
+    render(<ScheduleSubmissionScreen companyIds={['acme.test']} />);
     expect(
       screen.getByRole('button', { name: /Schedule Outreach/ }),
     ).toBeDisabled();
-    expect(screen.getByText('Not approved')).toBeInTheDocument();
-    expect(
-      screen.getByText(/Some selected companies are not ready/),
-    ).toBeInTheDocument();
+    expect(mocks.mutations['send:enqueueSend']).not.toHaveBeenCalled();
   });
 
   it('cancels queued sends for selected companies', async () => {

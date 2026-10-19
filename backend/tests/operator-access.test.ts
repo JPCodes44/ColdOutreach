@@ -29,6 +29,8 @@ function guardedCalls(ids: {
   sent: string;
 }): Record<string, Args> {
   return {
+    'emailOnboarding:get': {},
+    'emailOnboarding:save': { email: 'client@proton.me' },
     'settings:get': {},
     'settings:save': {
       niche: 'Clinics',
@@ -38,6 +40,7 @@ function guardedCalls(ids: {
       customInstructions: '',
     },
     'outreachRuns:requestRuns': { companyIds: [] },
+    'outreachRuns:deleteDrafts': { companyIds: [] },
     'outreachRuns:listPipelineCompanies': {},
     'outreachRuns:getReview': { companyId: 'a.test' },
     'outreachRuns:saveDraftEdits': {
@@ -58,6 +61,10 @@ function guardedCalls(ids: {
     },
     'companies:importCompanies': { companies: [] },
     'companies:deleteCompanies': { externalIds: [] },
+    'recipientEnrichment:fillEmails': {
+      companyId: 'a.test',
+      targetTitles: ['process engineer'],
+    },
     'emails:listEmailTableRows': {},
     'emails:listCompaniesWithEmails': {},
     'emails:getCompanyEmailDrafts': { companyId: 'a.test' },

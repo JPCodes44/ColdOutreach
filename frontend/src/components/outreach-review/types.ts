@@ -144,37 +144,18 @@ export interface DraftWorkspaceProps {
 export interface DraftEditorProps {
   fields: EditableFields;
   onChange: (fields: EditableFields) => void;
-  approved: boolean;
   dirty: boolean;
   busy: boolean;
   error: string | null;
-  /** Flagged claims, hard blockers, and the reviewer's acknowledgements. */
-  review: ClaimReviewProps;
   onSave: () => void;
-  onApprove: () => void;
-  onUnapprove: () => void;
 }
 
 export interface EmailPreviewProps {
   content: OutreachEmailContent;
 }
 
-export interface ClaimReviewProps {
-  /** Unsupported claims; each must be acknowledged before approval. */
-  claims: string[];
-  /** Problems that must be fixed before approval (e.g. missing signature). */
-  blockers: string[];
-  acknowledged: string[];
-  onAcknowledge: (claim: string, checked: boolean) => void;
-}
-
 export interface DraftActionsProps {
-  approved: boolean;
   dirty: boolean;
   busy: boolean;
-  /** No blockers and every flagged claim acknowledged. */
-  ready: boolean;
   onSave: () => void;
-  onApprove: () => void;
-  onUnapprove: () => void;
 }

@@ -150,6 +150,21 @@ function makeConsoleProps(): FilterConsoleProps {
 }
 
 describe('FilterConsole', () => {
+  it.each([
+    ['Small', 'small'],
+    ['Medium', 'medium'],
+    ['Large', 'large'],
+    ['Megacorp', 'megacorp'],
+  ])('uses %s as an understandable size filter', async (label, value) => {
+    const props = makeConsoleProps();
+    render(<FilterConsole {...props} />);
+    await userEvent.selectOptions(
+      screen.getByLabelText('Company Size'),
+      screen.getByRole('option', { name: label }),
+    );
+    expect(props.onCompanySizeChange).toHaveBeenCalledWith(value);
+  });
+
   it('renders the search, all filter selects, and active chips', () => {
     render(<FilterConsole {...makeConsoleProps()} />);
     expect(screen.getByText('Keywords')).toBeInTheDocument();

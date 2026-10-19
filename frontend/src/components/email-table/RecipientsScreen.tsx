@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useMutation, useQuery } from 'convex/react';
+import { useAction, useMutation, useQuery } from 'convex/react';
 import { makeFunctionReference } from 'convex/server';
 import { HotTable, HotColumn } from '@handsontable/react-wrapper';
 import { registerAllModules } from 'handsontable/registry';
 import type { CellValue } from 'handsontable/common';
 import { DeleteConfirmationModal } from '../modals';
 import { errorMessage } from '../shared/errorMessage';
+import { RecipientResearchInfo } from './RecipientResearchInfo';
 import 'handsontable/styles/handsontable.min.css';
 import 'handsontable/styles/ht-theme-main.min.css';
 
@@ -18,6 +19,19 @@ interface EmailTableRow {
   email2: string;
   email3: string;
   status: string;
+  enrichment?: {
+    token: string;
+    status: 'running' | 'done' | 'failed';
+    message: string;
+    creditsConsumed?: number;
+  };
+  contacts?: {
+    slot: string;
+    name: string;
+    title: string;
+    email: string;
+    role: string;
+  }[];
   /** Pipeline draft state; not shown as a grid column. */
   draftState: 'none' | 'running' | 'ready' | 'approved' | 'failed' | 'legacy';
 }
@@ -45,13 +59,20 @@ const deleteCompaniesMutation = makeFunctionReference<
   null
 >('companies:deleteCompanies');
 
+const fillEmailsAction = makeFunctionReference<
+  'action',
+  { companyId: string; targetTitles: string[] },
+  { filled: number; message: string; failed?: boolean }
+>('recipientEnrichment:fillEmails');
+
 const columns = [
   'Company',
   'Email1',
   'Email2',
   'Email3',
   'Status',
-  'Action',
+  'Delete',
+  'Apollo',
 ] as const;
 const actionColumnIndex = 5;
 const deliveryFilterOptions = [
@@ -73,6 +94,22 @@ const editableField: Record<number, 'email1' | 'email2' | 'email3'> = {
 
 /** Recipients spreadsheet (Handsontable); loaded lazily by `EmailTableScreen`. */
 export function RecipientsScreen() {
+  const fillEmails = useAction(fillEmailsAction);
+  const [targetTitles, setTargetTitles] = useState(
+    'research scientist, process engineer, process improvement specialist, operations specialist',
+  );
+  const [enrichmentCompany, setEnrichmentCompany] = useState('all');
+  const [enriching, setEnriching] = useState(false);
+  const [enrichmentMessage, setEnrichmentMessage] = useState('');
+  const [enrichmentError, setEnrichmentError] = useState<string | null>(null);
+  const stopEnrichment = useRef(false);
+  const enrichmentBusy = useRef(false);
+  useEffect(
+    () => () => {
+      stopEnrichment.current = true;
+    },
+    [],
+  );
   const rows = useQuery(listEmailTableRowsQuery, {});
   const setEmailRow = useMutation(setEmailRowMutation);
   const deleteCompanies = useMutation(deleteCompaniesMutation);
@@ -110,11 +147,11 @@ export function RecipientsScreen() {
     [filteredRows],
   );
 
-  // Re-seed the grid only when the *set of companies* changes, so persisting an
-  // edit (which updates the query) doesn't clobber the cell being typed in.
+  // Refresh for company/filter or enrichment changes; manual-save echoes do not
+  // replace the grid while a cell is being edited.
   useEffect(() => {
     if (rows === undefined) return;
-    const key = `${deliveryFilter}:${filteredRows.map((r) => r.companyId).join('|')}`;
+    const key = `${deliveryFilter}:${filteredRows.map((r) => `${r.companyId}:${r.enrichment?.token ?? ''}:${r.enrichment?.status ?? ''}`).join('|')}`;
     if (key === companyKeyRef.current) return;
     companyKeyRef.current = key;
     companyIdsRef.current = filteredRows.map((r) => r.companyId);
@@ -127,10 +164,49 @@ export function RecipientsScreen() {
         r.email3,
         r.status,
         isUndrafted(r) ? 'Delete' : '',
+        r.enrichment?.message ?? '',
       ]),
     );
   }, [rows, filteredRows, deliveryFilter]);
 
+  const missingRows = filteredRows.filter(
+    (row) =>
+      [row.email1, row.email2, row.email3].some((email) => !email.trim()) &&
+      (enrichmentCompany === 'all' || enrichmentCompany === row.companyId),
+  );
+  const runEnrichment = async () => {
+    if (enrichmentBusy.current) return;
+    enrichmentBusy.current = true;
+    stopEnrichment.current = false;
+    setEnriching(true);
+    setEnrichmentError(null);
+    const titles = targetTitles
+      .split(',')
+      .map((title) => title.trim())
+      .filter(Boolean);
+    try {
+      for (const [index, row] of missingRows.entries()) {
+        if (stopEnrichment.current) break;
+        setEnrichmentMessage(
+          `Finding contacts for ${row.company} (${index + 1}/${missingRows.length})…`,
+        );
+        const result = await fillEmails({
+          companyId: row.companyId,
+          targetTitles: titles,
+        });
+        setEnrichmentMessage(`${row.company}: ${result.message}`);
+        if (result.failed) {
+          setEnrichmentError(result.message);
+          break;
+        }
+      }
+    } catch (error) {
+      setEnrichmentError(errorMessage(error, 'Apollo enrichment failed.'));
+    } finally {
+      enrichmentBusy.current = false;
+      setEnriching(false);
+    }
+  };
   const companyCount = filteredRows.length;
   const deleteFilteredRows = () => {
     if (filteredCompanyIds.length === 0) return;
@@ -159,6 +235,93 @@ export function RecipientsScreen() {
           Add up to three recipient emails per company. Edits save
           automatically.
         </p>
+      </div>
+      <RecipientResearchInfo />
+      <div className="emailEnrichmentPanel">
+        <p>
+          Fill empty slots with two upper-management contacts (Email1 and
+          Email2) and one R&amp;D, process improvement, or operations employee
+          (Email3). Existing emails stay in place.
+        </p>
+        <div className="emailEnrichmentControls">
+          <label>
+            Specialist job titles
+            <input
+              aria-label="Specialist job titles"
+              value={targetTitles}
+              onChange={(event) => setTargetTitles(event.target.value)}
+              disabled={enriching}
+            />
+          </label>
+          <label>
+            Company
+            <select
+              aria-label="Company to enrich"
+              value={enrichmentCompany}
+              onChange={(event) => setEnrichmentCompany(event.target.value)}
+              disabled={enriching}
+            >
+              <option value="all">All filtered companies</option>
+              {filteredRows.map((row) => (
+                <option key={row.companyId} value={row.companyId}>
+                  {row.company}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="emailEnrichmentFill"
+            disabled={
+              enriching || missingRows.length === 0 || !targetTitles.trim()
+            }
+            onClick={() => void runEnrichment()}
+          >
+            {enriching ? 'Finding contacts…' : 'Fill missing emails'}
+          </button>
+          {enriching && (
+            <button
+              type="button"
+              onClick={() => {
+                stopEnrichment.current = true;
+                setEnrichmentMessage('Stopping after the current company…');
+              }}
+            >
+              Stop after current company
+            </button>
+          )}
+        </div>
+        <p className="emailTableSubtitle">
+          Apollo search is free; enrichment uses Apollo credits, even when no
+          usable email is found. Up to three people enriched per company per
+          run. Only verified work emails at the current company are saved.
+        </p>
+        {enrichmentMessage && <p role="status">{enrichmentMessage}</p>}
+        {enrichmentError && (
+          <p className="emailTableError" role="alert">
+            {enrichmentError}
+          </p>
+        )}
+        {filteredRows.some((row) => row.contacts?.length) && (
+          <details>
+            <summary>Apollo contact details</summary>
+            {filteredRows
+              .filter((row) => row.contacts?.length)
+              .map((row) => (
+                <div key={row.companyId}>
+                  <strong>{row.company}</strong>
+                  <ul>
+                    {row.contacts?.map((contact) => (
+                      <li key={contact.slot}>
+                        {contact.slot}: {contact.name} — {contact.title} (
+                        {contact.role}); {contact.email}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+          </details>
+        )}
       </div>
       {deleteError !== null ? (
         <p className="emailTableError" role="alert">
@@ -208,14 +371,15 @@ export function RecipientsScreen() {
               data={grid}
               colHeaders={[...columns]}
               rowHeaders
+              readOnly={enriching}
               width="100%"
-              height="100%"
+              height="auto"
               stretchH="all"
               className="emailHotTable ht-theme-main"
               licenseKey="non-commercial-and-evaluation"
               navigableHeaders
               manualColumnResize
-              colWidths={[220, 220, 220, 220, 120, 90]}
+              colWidths={[220, 220, 220, 220, 120, 90, 300]}
               rowHeights={32}
               cells={(row, col) => {
                 if (col === actionColumnIndex && deletableRef.current[row]) {
@@ -258,7 +422,8 @@ export function RecipientsScreen() {
               <HotColumn title="Email2" data={2} width={220} type="text" />
               <HotColumn title="Email3" data={3} width={220} type="text" />
               <HotColumn title="Status" data={4} width={120} readOnly />
-              <HotColumn title="Action" data={5} width={90} readOnly />
+              <HotColumn title="Delete" data={5} width={90} readOnly />
+              <HotColumn title="Apollo" data={6} width={300} readOnly />
             </HotTable>
           </div>
         </section>

@@ -35,6 +35,8 @@ export interface DashboardConcept {
 
 /** Structured, editable content for one outreach email. */
 export interface OutreachEmailContent {
+  /** Research-only correspondence omits all supplemental report sections. */
+  format?: 'letter';
   subject: string;
   /** Greeting + observation, opportunity, and solution paragraphs. */
   opening: string;
@@ -44,6 +46,19 @@ export interface OutreachEmailContent {
   /** The low-pressure conversation-starting question (+ optional sign-off). */
   closing: string;
   signature: string;
+}
+
+/** Preserve the letter while removing optional research/report sections. */
+export function asLetterContent(
+  content: OutreachEmailContent,
+): OutreachEmailContent {
+  return {
+    ...content,
+    format: 'letter',
+    findings: [],
+    workflow: [],
+    dashboard: { title: '', metrics: [], stages: [] },
+  };
 }
 
 export interface RenderedOutreachEmail {
@@ -120,7 +135,7 @@ export function validateOutreachContent(
   if (content.signature.length > LIMITS.signature) {
     issues.push(`Signature exceeds ${LIMITS.signature} characters.`);
   }
-  if (content.dashboard.metrics.length === 0) {
+  if (content.format !== 'letter' && content.dashboard.metrics.length === 0) {
     issues.push('Dashboard concept has no metrics.');
   }
   if (
@@ -146,43 +161,45 @@ export function renderOutreachText(content: OutreachEmailContent): string {
   const out: string[] = [];
   out.push(splitParagraphs(content.opening).join('\n\n'));
 
-  const dashboard = [
-    `${DASHBOARD_LABEL.toUpperCase()}: ${content.dashboard.title}`,
-    DASHBOARD_DISCLAIMER,
-  ];
-  if (content.dashboard.stages.length > 0) {
+  if (content.format !== 'letter') {
+    const dashboard = [
+      `${DASHBOARD_LABEL.toUpperCase()}: ${content.dashboard.title}`,
+      DASHBOARD_DISCLAIMER,
+    ];
+    if (content.dashboard.stages.length > 0) {
+      dashboard.push(
+        `Example lead stages: ${content.dashboard.stages.join(' -> ')}`,
+      );
+    }
     dashboard.push(
-      `Example lead stages: ${content.dashboard.stages.join(' -> ')}`,
+      ...content.dashboard.metrics.map(
+        (metric) => `- ${metric.label}: [ - ]  (${metric.description})`,
+      ),
     );
-  }
-  dashboard.push(
-    ...content.dashboard.metrics.map(
-      (metric) => `- ${metric.label}: [ - ]  (${metric.description})`,
-    ),
-  );
-  out.push(dashboard.join('\n'));
+    out.push(dashboard.join('\n'));
 
-  if (content.findings.length > 0) {
-    out.push(
-      [
-        'WHAT I NOTICED ON YOUR SITE',
-        ...content.findings.map(
-          (finding) =>
-            `- ${finding.text} (seen on ${displaySource(finding.sourceUrl)})`,
-        ),
-      ].join('\n'),
-    );
-  }
+    if (content.findings.length > 0) {
+      out.push(
+        [
+          'WHAT I NOTICED ON YOUR SITE',
+          ...content.findings.map(
+            (finding) =>
+              `- ${finding.text} (seen on ${displaySource(finding.sourceUrl)})`,
+          ),
+        ].join('\n'),
+      );
+    }
 
-  if (content.workflow.length > 0) {
-    out.push(
-      [
-        'PROPOSED LEAD-RESPONSE WORKFLOW',
-        ...content.workflow.map(
-          (step, index) => `${index + 1}. ${step.name}: ${step.description}`,
-        ),
-      ].join('\n'),
-    );
+    if (content.workflow.length > 0) {
+      out.push(
+        [
+          'PROPOSED LEAD-RESPONSE WORKFLOW',
+          ...content.workflow.map(
+            (step, index) => `${index + 1}. ${step.name}: ${step.description}`,
+          ),
+        ].join('\n'),
+      );
+    }
   }
 
   out.push(splitParagraphs(content.closing).join('\n\n'));
@@ -270,9 +287,9 @@ export function renderOutreachHtml(content: OutreachEmailContent): string {
   const body = [
     paragraphsHtml(content.opening),
     // The opening ends by introducing the mockup, so it follows directly.
-    dashboardHtml(content.dashboard),
-    findingsHtml(content.findings),
-    workflowHtml(content.workflow),
+    content.format === 'letter' ? '' : dashboardHtml(content.dashboard),
+    content.format === 'letter' ? '' : findingsHtml(content.findings),
+    content.format === 'letter' ? '' : workflowHtml(content.workflow),
     paragraphsHtml(content.closing),
     signature.length > 0 ? `<p style="${P_STYLE}">${signature}</p>` : '',
   ]
@@ -428,14 +445,18 @@ export function findDraftClaims(
     content.subject,
     content.opening,
     content.closing,
-    ...content.findings.map((finding) => finding.text),
-    ...content.workflow.flatMap((step) => [step.name, step.description]),
-    content.dashboard.title,
-    ...content.dashboard.metrics.flatMap((metric) => [
-      metric.label,
-      metric.description,
-    ]),
-    ...content.dashboard.stages,
+    ...(content.format === 'letter'
+      ? []
+      : [
+          ...content.findings.map((finding) => finding.text),
+          ...content.workflow.flatMap((step) => [step.name, step.description]),
+          content.dashboard.title,
+          ...content.dashboard.metrics.flatMap((metric) => [
+            metric.label,
+            metric.description,
+          ]),
+          ...content.dashboard.stages,
+        ]),
   ];
   const found = new Set<string>();
   for (const text of texts) {

@@ -1,11 +1,11 @@
 # ColdOutreach
 
-A business-outreach workspace: discover companies, review each prospect's real
-website, generate an evidence-backed outreach email with an illustrative
-reporting concept, review and approve it, and send it through Gmail with
-durable sent history. Built with TypeScript, React/Vite, Bun, and Convex.
+A business-outreach workspace: discover companies, draft from company research
+or an optional website review, view/edit the email, and send it through Gmail
+with durable sent history. Built with TypeScript, React/Vite, Bun, and Convex.
 
-Every generated email follows the same formula:
+Research-only emails contain the letter, closing question, and signature.
+With website review enabled, emails follow this formula:
 
 1. A specific observation from the prospect's actual website.
 2. An evidence-backed lead-capture opportunity (observations are kept separate
@@ -33,7 +33,10 @@ The workspace package names remain `@emailstrat/*` for import compatibility.
    name, signature, and any custom email instructions. Each save creates a new
    version that applies to future pipeline runs only; existing drafts and queued
    emails never change. Credentials are never entered or shown here.
-2. **Companies** — discover companies (Gemini with Google Search grounding,
+2. **Companies** — choose Small, Medium, Large, or Megacorp as an
+   industry-relative operating scale, without employee-count thresholds. Research
+   uses grounded business footprint, reach, and capacity; uncertain sizes remain
+   Unknown. Discover companies (Gemini with Google Search grounding,
    steered by your saved niche/offer) and import them into the pipeline.
    The **Plant-Based Food & Ingredient Manufacturers** industry preset sends a
    precise scope (manufacturers, processors, co-, contract and private-label
@@ -47,7 +50,7 @@ The workspace package names remain `@emailstrat/*` for import compatibility.
    existing drafts. Older records without descriptions fall back to industry
    until researched again. Presets live in
    `backend/convex/outreach/industryScopes.ts`.
-3. **Pipeline** — select one or more companies (up to 10 at a time) and run the
+3. **Pipeline** — select one or more companies and run the
    pipeline. With **Review website** enabled, it retrieves the company's homepage and up to three relevant
    same-site pages (contact, booking, quote, services), extracts contact methods,
    forms, calls to action, and chat/booking widgets as numbered evidence, then
@@ -57,20 +60,68 @@ The workspace package names remain `@emailstrat/*` for import compatibility.
    industry, description, location, size, and tech stack) and your email instructions
    instead. The toggle starts disabled and applies to the next selected batch;
    each run saves its mode, and regenerating from Review preserves that mode.
-   Research-only drafts include a proposed workflow and illustrative dashboard,
-   without website findings or claims that the site was reviewed.
-4. **Review** — inspect sources (with retrieval times), observed facts vs.
-   hypotheses, the proposed workflow, and the dashboard concept. Edit the
-   subject, opening, closing, and signature, preview the HTML and plain-text
-   versions, then **Approve**. Approval is refused while the signature is
-   empty, and every flagged claim (a figure, outcome promise, or back-office
-   claim the website evidence does not support) must either be edited out or
-   individually confirmed; confirmations are stored with the approval. Any
-   later edit withdraws approval.
+   All selected companies are queued together as independent background jobs;
+   there is no 10-company selection cap. Execution is subject to Convex action
+   capacity and provider rate limits. Batch runs skip companies with existing
+   drafts; use **Regenerate** in Review to explicitly replace one.
+   Research-only emails contain just the letter, closing question, and signature.
+   They contain no dashboards, workflow lists, metrics, or website findings.
+   Older research-only drafts use the same letter format in review and future
+   send snapshots; already-queued immutable snapshots retain their original content.
+   **Delete drafts** removes current drafts for selected companies while keeping
+   company research, recipients, run history, and sent email history. It refuses
+   active generation or sends; abandoned runs cannot restore a deleted draft.
+   **Delete companies** remains the separate action for removing company rows.
+4. **Review** — click a company row or its **Review** button in Pipeline to open
+   that company in a modal. View the draft, edit the subject, opening, closing,
+   and signature, preview HTML/plain text, or regenerate. Close the modal to
+   return to the same table filters and selection. Save edits when finished. Review is optional;
+   there is no approval or claim-confirmation step before sending.
 5. **Recipients** — enter up to three recipient addresses per company.
-6. **Send** → **Schedule** — choose approved companies, pick a time (or
-   immediately) and delivery method. Scheduling stores an immutable snapshot of
-   the approved subject, text, and HTML for each recipient.
+   **Free email research with Codex**, above Apollo enrichment, offers one
+   reusable system prompt for all companies. Computer use reads each company's
+   complete saved draft and research in its review modal, then chooses two
+   relevant decision-makers for Email1/Email2 and a specialist for Email3 based
+   on the email's context. The prompt contains no company snapshot or fixed
+   app URL and works independently of the current table filter. Copying starts
+   no research. The prompt gives a step-by-step Apollo navigation flow:
+   global search → company → Suggested leads → Search people / Show Filters
+   → Access email → check Verified → copy into the correct slot. Role filters
+   are chosen from each draft, with previous role filters cleared between slots.
+   The prompt directs computer use to the signed-in Apollo website,
+   with Access email pre-authorized using the existing credit balance for up to
+   three contacts per company, including unsuccessful attempts, without asking
+   again. Only email access is allowed; no phone/mobile or combined reveals.
+   Only work emails explicitly marked Verified by Apollo are saved. It
+   prohibits direct API calls, purchases, and upgrades; Apollo's own background
+   website requests are allowed. Emails displayed by Apollo do not need another
+   public listing. Existing addresses are preserved; unknown addresses stay
+   blank. CAPTCHA or blank blocking popups pause debugging and automation for
+   user intervention; work resumes only after the user confirms the page is ready.
+   Missing draft context or an exhausted credit balance must be reported.
+   Alternatively, use **Fill missing emails** with Apollo. Choose one company or all filtered
+   companies. Email1/Email2 target two upper-management contacts; Email3 targets
+   an R&D, process improvement, or operations employee, using editable job titles.
+   Existing emails are preserved. **Apollo contact details** shows names and roles.
+   Free People API Search finds candidates; Bulk People Enrichment reveals up to
+   three people per company per run and consumes Apollo credits even when no usable
+   email is returned. Only verified work emails with a matching current employer
+   are saved; partial results leave slots empty. Phones, personal email reveal,
+   and waterfall enrichment are disabled. No paid calls happen until clicked.
+   Configure `APOLLO_API_KEY` in the **ColdOutreach Convex server environment**
+   (dashboard Settings → Environment Variables), with access to People API Search
+   and Bulk People Enrichment. Never put the key in frontend variables or Git.
+   See [API research and pricing sources](docs/apollo-recipient-enrichment.md).
+6. **Send** → **Schedule** — choose companies with generated drafts, pick a time
+   (or immediately) and delivery method. Sending requires complete saved content,
+   a signature, and valid recipients. Companies already sending, sent, or
+   awaiting delivery review cannot be selected again. The schedule summary also
+   checks company/recipient contact history, active reservations, and duplicates
+   within the selected batch. Only eligible companies are scheduled; blocked
+   rows keep their status and do not prevent the rest from being queued.
+   Duplicate-send protections are rechecked atomically when queueing.
+   Scheduling stores an immutable snapshot of the saved subject, text, and HTML;
+   later draft edits do not change emails already queued.
 7. **History** — follow queued, sending, sent, failed, canceled, and
    uncertain sends; cancel queued sends; resolve uncertain ones; open the exact
    content of any sent email. Sent emails show **Bounced** or **Replied** when
@@ -227,7 +278,7 @@ bunx convex run sendActions:sendSelfTest '{"companyId":"example.com"}'
 
 Self-tests are marked as tests in History and excluded from the contact ledgers.
 To rehearse the full scheduled path to a real recipient without contacting
-them, set `GMAIL_REDIRECT_TO` to your own inbox, schedule an approved draft,
+them, set `GMAIL_REDIRECT_TO` to your own inbox, schedule a generated draft,
 then unset it. Remove test records from History with
 `bunx convex run send:purgeTestHistory` (optionally
 `'{"canceledRecipients":["placeholder@example.com"]}'` to also drop canceled
@@ -246,7 +297,7 @@ bunx convex run migrations:retireLegacyJobData  # mark artifacts obsolete, block
 ```
 
 Independently of the migration, the dispatcher refuses any queue row without an
-approved snapshot and marks it `legacy-blocked`, so legacy drafts cannot be sent.
+saved snapshot and marks it `legacy-blocked`, so legacy drafts cannot be sent.
 
 ### Security boundaries and checks
 

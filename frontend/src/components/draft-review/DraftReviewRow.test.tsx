@@ -33,7 +33,26 @@ describe('DraftReviewRow', () => {
     expect(onSelect).not.toHaveBeenCalled();
   });
 
-  it('disables selection for drafts that are not approved', () => {
+  it.each(['Sending', 'Sent', 'Needs Review'])(
+    'disables %s companies even when the draft is ready',
+    (status) => {
+      render(
+        <DraftReviewRow
+          row={{ ...base, status }}
+          selected={false}
+          active={false}
+          onSelect={vi.fn()}
+          onToggleSelected={vi.fn()}
+        />,
+      );
+      expect(screen.getByLabelText('Select Acme')).toBeDisabled();
+      expect(
+        screen.queryByText('Generate a draft in Pipeline first'),
+      ).toBeNull();
+    },
+  );
+
+  it('disables selection when a generated draft is missing', () => {
     render(
       <DraftReviewRow
         row={{ ...base, draftState: 'legacy', draftLabel: 'Legacy Draft' }}

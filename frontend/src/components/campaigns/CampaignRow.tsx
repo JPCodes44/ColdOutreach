@@ -17,6 +17,7 @@ export function CampaignRow({
       tabIndex={0}
       onClick={() => onOpenReview(company.id)}
       onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
           onOpenReview(company.id);

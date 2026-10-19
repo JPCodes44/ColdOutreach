@@ -2,43 +2,38 @@ import { useState } from 'react';
 import { useMutation } from 'convex/react';
 import { errorMessage } from '../shared/errorMessage';
 import {
-  MAX_RUNS_PER_REQUEST,
   deleteCompaniesMutation,
+  deleteDraftsMutation,
   requestRunsMutation,
 } from './api';
 
 /** Run/Delete actions for the pipeline screen, with user-facing notices. */
 export function usePipelineActions(
   selectedIds: ReadonlySet<string>,
+  runnableIds: ReadonlySet<string>,
   clearSelected: () => void,
-  nameOf: (id: string) => string,
   websiteReviewEnabled: boolean,
 ) {
   const requestRuns = useMutation(requestRunsMutation);
   const deleteCompanies = useMutation(deleteCompaniesMutation);
+  const deleteDrafts = useMutation(deleteDraftsMutation);
   const [running, setRunning] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<string[] | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{
+    kind: 'companies' | 'drafts';
+    ids: string[];
+  } | null>(null);
 
   const run = async () => {
-    const ids = [...selectedIds];
-    if (ids.length === 0) return;
-    if (ids.length > MAX_RUNS_PER_REQUEST) {
-      setNotice(`Run at most ${MAX_RUNS_PER_REQUEST} companies at a time.`);
-      return;
-    }
+    const ids = [...runnableIds];
+    if (ids.length === 0 || running) return;
     setRunning(true);
+    setNotice(null);
     try {
-      const { started, skipped } = await requestRuns({
+      await requestRuns({
         companyIds: ids,
         websiteReviewEnabled,
       });
-      const parts = [
-        `Started ${started.length} run${started.length === 1 ? '' : 's'}. No email is sent.`,
-      ];
-      for (const skip of skipped)
-        parts.push(`${nameOf(skip.companyId)}: ${skip.reason}`);
-      setNotice(parts.join(' '));
       clearSelected();
     } catch (error) {
       setNotice(errorMessage(error, 'Could not start the pipeline.'));
@@ -48,11 +43,18 @@ export function usePipelineActions(
   };
 
   const confirmDelete = async () => {
-    const ids = pendingDelete;
+    const pending = pendingDelete;
     setPendingDelete(null);
-    if (ids === null) return;
+    if (pending === null) return;
     try {
-      await deleteCompanies({ externalIds: ids });
+      if (pending.kind === 'drafts') {
+        const { deleted } = await deleteDrafts({ companyIds: pending.ids });
+        setNotice(
+          `Deleted ${deleted} draft${deleted === 1 ? '' : 's'}. Companies are kept.`,
+        );
+      } else {
+        await deleteCompanies({ externalIds: pending.ids });
+      }
       clearSelected();
     } catch (error) {
       setNotice(errorMessage(error, 'Delete failed.'));
@@ -65,8 +67,9 @@ export function usePipelineActions(
     dismissNotice: () => setNotice(null),
     run,
     pendingDelete,
-    requestDelete: () => {
-      if (selectedIds.size > 0) setPendingDelete([...selectedIds]);
+    requestDelete: (kind: 'companies' | 'drafts') => {
+      if (selectedIds.size > 0)
+        setPendingDelete({ kind, ids: [...selectedIds] });
     },
     cancelDelete: () => setPendingDelete(null),
     confirmDelete,

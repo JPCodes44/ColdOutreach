@@ -286,13 +286,24 @@ export const COMPOSITION_SCHEMA = {
   },
 } as const;
 
-/** One completion supplies the email and illustrative concepts in research-only mode. */
+/** Research-only output contains the letter fields, without report sections. */
 export const RESEARCH_COMPOSITION_SCHEMA = {
-  ...COMPOSITION_SCHEMA,
-  required: [...COMPOSITION_SCHEMA.required, 'proposedWorkflow', 'dashboard'],
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'subject',
+    'greeting',
+    'observationParagraph',
+    'opportunityParagraph',
+    'solutionParagraph',
+    'question',
+  ],
   properties: {
-    ...COMPOSITION_SCHEMA.properties,
-    proposedWorkflow: ANALYSIS_SCHEMA.properties.proposedWorkflow,
-    dashboard: ANALYSIS_SCHEMA.properties.dashboard,
+    subject: { type: 'string' },
+    greeting: { type: 'string' },
+    observationParagraph: { type: 'string' },
+    opportunityParagraph: { type: 'string' },
+    solutionParagraph: { type: 'string' },
+    question: { type: 'string' },
   },
 } as const;

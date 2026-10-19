@@ -9,11 +9,13 @@ export function CampaignHeader({
   statusFilter,
   onStatusFilterChange,
   selectedCount,
+  runnableCount,
   running,
   websiteReviewEnabled,
   onWebsiteReviewChange,
   onRun,
   onDelete,
+  onDeleteDrafts,
 }: CampaignHeaderProps) {
   return (
     <section className="campaignHeader">
@@ -24,7 +26,7 @@ export function CampaignHeader({
             {websiteReviewEnabled
               ? 'Draft emails using website review and company research.'
               : 'Draft emails using company research and email instructions only.'}{' '}
-            Generating a draft never sends email.
+            Existing drafts are skipped. Generating a draft never sends email.
           </p>
           <div className="campaignHeaderActions">
             <label className="campaignWebsiteToggle">
@@ -70,17 +72,26 @@ export function CampaignHeader({
             <button
               className="campaignDeleteButton"
               type="button"
-              onClick={onDelete}
-              disabled={selectedCount === 0}
+              onClick={onDeleteDrafts}
+              disabled={selectedCount === 0 || running}
             >
               <Icon name="delete" size={16} />
-              Delete
+              Delete drafts
+            </button>
+            <button
+              className="campaignDeleteButton"
+              type="button"
+              onClick={onDelete}
+              disabled={selectedCount === 0 || running}
+            >
+              <Icon name="delete" size={16} />
+              Delete companies
             </button>
             <button
               className="generateButton"
               type="button"
               onClick={onRun}
-              disabled={selectedCount === 0 || running}
+              disabled={selectedCount === 0 || runnableCount === 0 || running}
             >
               <Icon name={running ? 'sync' : 'travel_explore'} size={16} />
               {running ? 'Starting...' : 'Run pipeline'}

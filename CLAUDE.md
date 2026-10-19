@@ -2,6 +2,12 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Browser interaction
+
+Use ChatGPT computer use for web browsing and the user's existing signed-in
+browser. Use gstack `/browse` only when explicitly requested by the user. If
+computer use is unavailable, explain that limitation instead of switching tools.
+
 ## Project
 
 ColdOutreach is a business-outreach pipeline (see `README.md`): review a

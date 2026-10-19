@@ -68,16 +68,63 @@ export const getScheduleSummary = query({
   handler: async (ctx, { companyIds }) => {
     await requireOperator(ctx);
     const entities = [];
-    let approvedDrafts = 0;
+    let readyDrafts = 0;
     let totalEmailsQueued = 0;
-    for (const companyId of companyIds) {
+    const batchDomains = new Set<string>();
+    const batchEmails = new Set<string>();
+    for (const companyId of new Set(companyIds)) {
       const company = await companyByExternalId(ctx, companyId);
       if (company === null) continue;
       const contacts = recipientEmails(company).length;
-      const { state } = await draftState(ctx, companyId);
-      const ready = state === 'approved' && contacts > 0;
+      const { state, draft } = await draftState(ctx, companyId);
+      const emails = recipientEmails(company);
+      let notReadyReason =
+        draft === null
+          ? 'No draft'
+          : validateOutreachContent(draft.content).length > 0
+            ? 'Draft incomplete'
+            : !draft.content.signature.trim()
+              ? 'Missing signature'
+              : contacts === 0
+                ? 'No recipients'
+                : emails.some((email) => normalizeEmailAddress(email) === null)
+                  ? 'Invalid recipients'
+                  : null;
+      const normalizedDomain = normalizeCompanyDomain(company.domain);
+      const normalizedEmails = emails
+        .map(normalizeEmailAddress)
+        .filter((email): email is string => email !== null);
+      if (notReadyReason === null) {
+        notReadyReason = await companySendBlockReason(
+          ctx,
+          company,
+          normalizedDomain,
+        );
+      }
+      if (
+        notReadyReason === null &&
+        normalizedDomain &&
+        batchDomains.has(normalizedDomain)
+      ) {
+        notReadyReason = `Company appears more than once: ${company.domain}`;
+      }
+      const companyEmails = new Set<string>();
+      if (notReadyReason === null) {
+        for (const email of normalizedEmails) {
+          if (batchEmails.has(email) || companyEmails.has(email)) {
+            notReadyReason = `Duplicate recipient in batch: ${email}`;
+            break;
+          }
+          companyEmails.add(email);
+          notReadyReason = await recipientSendBlockReason(ctx, email);
+          if (notReadyReason !== null) break;
+        }
+      }
+      const ready = notReadyReason === null;
       if (ready) {
-        approvedDrafts += 1;
+        if (normalizedDomain) batchDomains.add(normalizedDomain);
+        for (const email of normalizedEmails) batchEmails.add(email);
+        readyDrafts += 1;
         totalEmailsQueued += contacts;
       }
       entities.push({
@@ -89,12 +136,13 @@ export const getScheduleSummary = query({
         status: company.emailStatus ?? 'Not Sent',
         draftState: state,
         ready,
+        notReadyReason,
       });
     }
     return {
       entities,
       totalCompanies: entities.length,
-      approvedDrafts,
+      readyDrafts,
       totalEmailsQueued,
     };
   },
@@ -111,8 +159,8 @@ interface PendingSend {
   normalizedDomain: string;
 }
 
-async function assertNotContacted(
-  ctx: MutationCtx,
+async function companySendBlockReason(
+  ctx: QueryCtx,
   company: Doc<'companies'>,
   normalizedDomain: string,
 ) {
@@ -124,19 +172,18 @@ async function assertNotContacted(
       )
       .unique();
     if (ledger !== null) {
-      throw new Error(`Company already contacted: ${company.name}`);
+      return `Company already contacted: ${company.name}`;
     }
   }
   const rows = await queueRowsForCompany(ctx, company.externalId);
   if (rows.some(isReservation)) {
-    throw new Error(
-      `${company.name} already has outreach queued, sending, or awaiting review.`,
-    );
+    return `${company.name} already has outreach queued, sending, or awaiting review.`;
   }
+  return null;
 }
 
-async function assertRecipientAvailable(
-  ctx: MutationCtx,
+async function recipientSendBlockReason(
+  ctx: QueryCtx,
   normalizedEmail: string,
 ) {
   const ledger = await ctx.db
@@ -146,7 +193,7 @@ async function assertRecipientAvailable(
     )
     .unique();
   if (ledger !== null) {
-    throw new Error(`Recipient already contacted: ${ledger.email}`);
+    return `Recipient already contacted: ${ledger.email}`;
   }
   const rows = await ctx.db
     .query('sendQueue')
@@ -155,28 +202,25 @@ async function assertRecipientAvailable(
     )
     .collect();
   if (rows.some(isReservation)) {
-    throw new Error(`Recipient already has a pending send: ${normalizedEmail}`);
+    return `Recipient already has a pending send: ${normalizedEmail}`;
   }
+  return null;
 }
 
-/** Render the approved draft into an immutable snapshot, or throw. */
+/** Render the saved draft into an immutable snapshot, or throw. */
 export function snapshotForDraft(
   draft: Doc<'outreachDrafts'> | null,
   companyName: string,
 ): RenderedOutreachEmail {
   if (draft === null) {
-    throw new Error(
-      `${companyName}: generate and approve an outreach draft first.`,
-    );
-  }
-  if (draft.status !== 'approved') {
-    throw new Error(
-      `${companyName}: approve the reviewed draft before scheduling.`,
-    );
+    throw new Error(`${companyName}: generate an outreach draft first.`);
   }
   const issues = validateOutreachContent(draft.content);
   if (issues.length > 0) {
     throw new Error(`${companyName}: ${issues.join(' ')}`);
+  }
+  if (!draft.content.signature.trim()) {
+    throw new Error(`${companyName}: Add a signature before sending.`);
   }
   return renderOutreachEmail(draft.content);
 }
@@ -203,7 +247,12 @@ async function buildPendingSends(
       }
       batchDomains.add(normalizedDomain);
     }
-    await assertNotContacted(ctx, company, normalizedDomain);
+    const companyBlock = await companySendBlockReason(
+      ctx,
+      company,
+      normalizedDomain,
+    );
+    if (companyBlock !== null) throw new Error(companyBlock);
 
     const draft = await draftForCompany(ctx, companyId);
     const snapshot = snapshotForDraft(draft, company.name);
@@ -217,7 +266,11 @@ async function buildPendingSends(
         throw new Error(`Duplicate recipient in batch: ${normalizedEmail}`);
       }
       batchEmails.add(normalizedEmail);
-      await assertRecipientAvailable(ctx, normalizedEmail);
+      const recipientBlock = await recipientSendBlockReason(
+        ctx,
+        normalizedEmail,
+      );
+      if (recipientBlock !== null) throw new Error(recipientBlock);
       pending.push({
         company,
         draft: draft!,
@@ -270,7 +323,7 @@ async function insertQueueRow(
 }
 
 /**
- * Queue an immutable snapshot of each approved draft for each recipient and
+ * Queue an immutable snapshot of each saved draft for each recipient and
  * schedule dispatch. Rejects the whole batch on any invalid or duplicate entry.
  */
 export const enqueueSend = mutation({
@@ -369,8 +422,7 @@ export const claimQueueItem = internalMutation({
     if (item.snapshot === undefined) {
       await ctx.db.patch(itemId, {
         status: 'legacy-blocked',
-        error:
-          'Legacy job-application draft. Regenerate and approve a new outreach draft.',
+        error: 'Legacy job-application draft. Regenerate a new outreach draft.',
       });
       await refreshCompanyStatus(ctx, item.companyId);
       return null;

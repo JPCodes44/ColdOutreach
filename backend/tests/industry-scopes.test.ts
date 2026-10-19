@@ -37,6 +37,53 @@ describe('company research content', () => {
     expect(request.researchCriteria.scope).not.toContain('exclusively vegan');
   });
 
+  it.each(['small', 'medium', 'large', 'megacorp'])(
+    'passes %s as an industry-relative scale rather than an employee range',
+    (companySize) => {
+      const request = JSON.parse(
+        buildResearchContents({
+          industry: 'software',
+          companySize,
+          location: 'Canada',
+          techStack: [],
+          limit: 10,
+          excludedCompanyDomains: [],
+          outreachTarget: { niche: 'n', offer: 'o' },
+        }),
+      );
+      expect(request.researchCriteria.companySize).toBe(companySize);
+      expect(request.instruction).toContain(
+        'relative to the selected industry',
+      );
+      expect(request.instruction).toContain('not an employee-count filter');
+      expect(request.responseShape.companies[0].size).toContain('Unknown');
+    },
+  );
+
+  it('does not forward an old numeric size filter as a headcount requirement', () => {
+    const request = JSON.parse(
+      buildResearchContents({
+        industry: 'software',
+        companySize: '501-10000',
+        location: 'Canada',
+        techStack: [],
+        limit: 10,
+        excludedCompanyDomains: [],
+        outreachTarget: { niche: 'n', offer: 'o' },
+      }),
+    );
+    expect(request.researchCriteria.companySize).toBe('any');
+    expect(JSON.stringify(request)).not.toContain('501-10000');
+  });
+
+  it('keeps qualitative result sizes and leaves unsupported numeric sizes unknown', () => {
+    const results = classifyCandidates('software', [
+      { ...base, domain: 'small.test', size: 'small' },
+      { ...base, domain: 'uncertain.test', size: '150-200 employees' },
+    ]);
+    expect(results.map((result) => result.size)).toEqual(['Small', 'Unknown']);
+  });
+
   it('keeps manufacturing scope and factual descriptions without creating labels', () => {
     const results = classifyCandidates(PLANT_BASED_MANUFACTURING, [
       {

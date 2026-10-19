@@ -15,7 +15,7 @@ import { TargetEntities } from './TargetEntities';
 import { useScheduleActions } from './useScheduleActions';
 import type { DeliveryMethod, ScheduleSubmissionScreenProps } from './types';
 
-/** Schedule approved outreach snapshots for Gmail delivery. */
+/** Schedule saved outreach snapshots for Gmail delivery. */
 export function ScheduleSubmissionScreen({
   companyIds = [],
   onBack,
@@ -44,10 +44,11 @@ export function ScheduleSubmissionScreen({
   );
 
   const entities = summary?.entities ?? [];
-  const allReady =
-    entities.length > 0 && entities.every((entity) => entity.ready === true);
-  const canSchedule =
-    summary !== undefined && summary.approvedDrafts > 0 && allReady;
+  const readyCompanyIds = entities
+    .filter((entity) => entity.ready === true && companyIds.includes(entity.id))
+    .map((entity) => entity.id);
+  const blockedCount = entities.length - readyCompanyIds.length;
+  const canSchedule = readyCompanyIds.length > 0;
 
   return (
     <section className="scheduleScreen">
@@ -55,7 +56,7 @@ export function ScheduleSubmissionScreen({
         onBack={onBack}
         onSchedule={() =>
           void actions.schedule(
-            companyIds,
+            readyCompanyIds,
             computeScheduledAtMs(date, time, timezone),
             method,
           )
@@ -63,11 +64,12 @@ export function ScheduleSubmissionScreen({
         scheduling={actions.scheduling}
         canSchedule={canSchedule}
       />
-      {summary !== undefined && entities.length > 0 && !allReady ? (
+      {summary !== undefined && blockedCount > 0 ? (
         <div className="scheduleNotice">
-          Some selected companies are not ready (draft not approved or no
-          recipients). Approve their drafts in Review or go back and deselect
-          them.
+          {blockedCount} selected{' '}
+          {blockedCount === 1 ? 'company is' : 'companies are'} already
+          contacted, have active sends, or are not ready. Only eligible
+          companies will be scheduled. See each row for its status.
         </div>
       ) : null}
       {actions.notice !== null ? (
@@ -107,7 +109,7 @@ export function ScheduleSubmissionScreen({
         <DispatchSummaryPanel
           summary={{
             totalCompanies: summary?.totalCompanies ?? 0,
-            approvedDrafts: summary?.approvedDrafts ?? 0,
+            readyDrafts: summary?.readyDrafts ?? 0,
             totalEmailsQueued: summary?.totalEmailsQueued ?? 0,
           }}
         />

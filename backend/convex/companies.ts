@@ -21,6 +21,14 @@ import {
   stripMarkdownCodeFence,
 } from '@emailstrat/common';
 
+/** Qualitative scale labels; no headcount boundaries are implied. */
+const COMPANY_SCALE_LABELS = new Map([
+  ['small', 'Small'],
+  ['medium', 'Medium'],
+  ['large', 'Large'],
+  ['megacorp', 'Megacorp'],
+]);
+
 interface ResearchArgs {
   keywords?: string;
   industry: string;
@@ -88,7 +96,9 @@ function normalizeCompany(
       ? { description: company.description.trim().slice(0, 1000) }
       : {}),
     location: company.location?.trim() || 'Unknown',
-    size: company.size?.trim() || 'Unknown',
+    size:
+      COMPANY_SCALE_LABELS.get(company.size?.trim().toLowerCase() ?? '') ??
+      'Unknown',
     techStack: Array.isArray(company.techStack) ? company.techStack : [],
     confidence:
       typeof company.confidence === 'number'
@@ -153,9 +163,17 @@ function parseResearchResponse(
 export function buildResearchContents(args: ResearchPromptArgs): string {
   const { excludedCompanyDomains, outreachTarget, ...criteria } = args;
   const preset = industryScope(criteria.industry);
+  // Stale clients may still send old employee-range values. Never turn those
+  // into unsupported headcount requirements for the research model.
+  const scaleCriteria = {
+    ...criteria,
+    companySize: COMPANY_SCALE_LABELS.has(criteria.companySize)
+      ? criteria.companySize
+      : 'any',
+  };
   const researchCriteria = preset
-    ? { ...criteria, industry: preset.label, scope: preset.scope }
-    : criteria;
+    ? { ...scaleCriteria, industry: preset.label, scope: preset.scope }
+    : scaleCriteria;
   const extraFields = preset?.responseFields ?? {};
   return JSON.stringify({
     role: 'company_research_request',
@@ -173,7 +191,7 @@ export function buildResearchContents(args: ResearchPromptArgs): string {
           description:
             'A concise factual description of what the company makes or does, including specific products or services supported by search results; no category badges or inferred exclusivity claims.',
           location: 'string',
-          size: 'string',
+          size: 'Small, Medium, Large, Megacorp, or Unknown: qualitative operating scale relative to the industry, not an employee count.',
           techStack: ['string'],
           confidence: 'number from 0 to 100',
           ...extraFields,

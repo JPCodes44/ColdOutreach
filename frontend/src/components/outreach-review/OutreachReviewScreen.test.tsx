@@ -62,10 +62,14 @@ describe('OutreachReviewScreen', () => {
     expect(
       screen.queryByRole('region', { name: 'Website evidence' }),
     ).toBeNull();
+    expect(
+      screen.queryByRole('region', { name: 'Proposed solution' }),
+    ).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: /Regenerate/ }));
     expect(mocks.requestRuns).toHaveBeenCalledWith({
       companyIds: ['acme.test'],
       websiteReviewEnabled: false,
+      regenerate: true,
     });
   });
 

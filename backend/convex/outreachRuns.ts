@@ -12,11 +12,13 @@ import {
 import { requireOperator } from './operator';
 import {
   checkDraftForApproval,
+  asLetterContent,
   claimsAcknowledged,
   evidenceCorpus,
   validateOutreachContent,
 } from '@emailstrat/common';
 import { loadCurrentSettings } from './settings';
+import { hasActiveSends } from './send';
 import {
   analysisValidator,
   evidenceValidator,
@@ -26,7 +28,6 @@ import {
 
 /** Runs still "running" after this long are treated as abandoned. */
 export const STALE_RUN_MS = 10 * 60 * 1000;
-const MAX_RUNS_PER_REQUEST = 10;
 
 export type DraftState =
   | 'none'
@@ -52,10 +53,16 @@ export async function latestRun(ctx: QueryCtx, companyId: string) {
 }
 
 export async function draftForCompany(ctx: QueryCtx, companyId: string) {
-  return ctx.db
+  const draft = await ctx.db
     .query('outreachDrafts')
     .withIndex('by_company', (q) => q.eq('companyId', companyId))
     .unique();
+  if (draft === null) return null;
+  const run = await ctx.db.get(draft.runId);
+  // Also normalize older research-only drafts so review and future sends agree.
+  return run?.websiteReviewEnabled === false
+    ? { ...draft, content: asLetterContent(draft.content) }
+    : draft;
 }
 
 async function hasLegacyArtifact(ctx: QueryCtx, companyId: string) {
@@ -105,58 +112,68 @@ export const requestRuns = mutation({
   args: {
     companyIds: v.array(v.string()),
     websiteReviewEnabled: v.optional(v.boolean()),
+    regenerate: v.optional(v.boolean()),
   },
   returns: v.object({
     started: v.array(v.string()),
     skipped: v.array(v.object({ companyId: v.string(), reason: v.string() })),
   }),
-  handler: async (ctx, { companyIds, websiteReviewEnabled = false }) => {
+  handler: async (
+    ctx,
+    { companyIds, websiteReviewEnabled = false, regenerate = false },
+  ) => {
     await requireOperator(ctx);
     const unique = [...new Set(companyIds)];
-    if (unique.length > MAX_RUNS_PER_REQUEST) {
-      throw new Error(
-        `Run at most ${MAX_RUNS_PER_REQUEST} companies at a time.`,
-      );
-    }
     const settings = await loadCurrentSettings(ctx);
     const now = Date.now();
+    // Each company gets an independent background action. Queue them together;
+    // Convex schedules execution subject to the deployment's action capacity.
+    const results = await Promise.all(
+      unique.map(async (companyId) => {
+        const company = await companyByExternalId(ctx, companyId);
+        if (company === null) {
+          return { companyId, reason: 'Company not found.' };
+        }
+        if (websiteReviewEnabled && company.domain.trim().length === 0) {
+          return { companyId, reason: 'Company has no website domain.' };
+        }
+        const previous = await latestRun(ctx, companyId);
+        if (isActiveRun(previous, now)) {
+          return { companyId, reason: 'A run is already in progress.' };
+        }
+        if (!regenerate && (await draftForCompany(ctx, companyId)) !== null) {
+          return {
+            companyId,
+            reason:
+              'A draft already exists. Use Regenerate in Review to replace it.',
+          };
+        }
+        if (previous !== null && previous.status === 'running') {
+          await ctx.db.patch(previous._id, {
+            status: 'failed',
+            error: 'Run did not finish in time and was abandoned.',
+            finishedAt: now,
+          });
+        }
+        const runId = await ctx.db.insert('pipelineRuns', {
+          companyId,
+          status: 'running',
+          stage: 'queued',
+          websiteReviewEnabled,
+          settings,
+          startedAt: now,
+        });
+        await ctx.scheduler.runAfter(0, internal.outreachPipeline.execute, {
+          runId,
+        });
+        return { companyId, reason: null };
+      }),
+    );
     const started: string[] = [];
     const skipped: { companyId: string; reason: string }[] = [];
-
-    for (const companyId of unique) {
-      const company = await companyByExternalId(ctx, companyId);
-      if (company === null) {
-        skipped.push({ companyId, reason: 'Company not found.' });
-        continue;
-      }
-      if (websiteReviewEnabled && company.domain.trim().length === 0) {
-        skipped.push({ companyId, reason: 'Company has no website domain.' });
-        continue;
-      }
-      const previous = await latestRun(ctx, companyId);
-      if (isActiveRun(previous, now)) {
-        skipped.push({ companyId, reason: 'A run is already in progress.' });
-        continue;
-      }
-      if (previous !== null && previous.status === 'running') {
-        await ctx.db.patch(previous._id, {
-          status: 'failed',
-          error: 'Run did not finish in time and was abandoned.',
-          finishedAt: now,
-        });
-      }
-      const runId = await ctx.db.insert('pipelineRuns', {
-        companyId,
-        status: 'running',
-        stage: 'queued',
-        websiteReviewEnabled,
-        settings,
-        startedAt: now,
-      });
-      await ctx.scheduler.runAfter(0, internal.outreachPipeline.execute, {
-        runId,
-      });
-      started.push(companyId);
+    for (const { companyId, reason } of results) {
+      if (reason === null) started.push(companyId);
+      else skipped.push({ companyId, reason });
     }
     return { started, skipped };
   },
@@ -415,7 +432,7 @@ async function draftCorpus(ctx: QueryCtx, draft: Doc<'outreachDrafts'>) {
 }
 
 /**
- * Mark the reviewed draft as approved for scheduling. Does not send. Refuses
+ * Legacy compatibility endpoint; sending no longer requires approval. Refuses
  * structural problems and a missing signature outright; unsupported claims
  * must each be explicitly acknowledged by the reviewer.
  */
@@ -447,7 +464,7 @@ export const approveDraft = mutation({
   },
 });
 
-/** Withdraw approval without editing. */
+/** Legacy compatibility endpoint for withdrawing a historical approval. */
 export const unapproveDraft = mutation({
   args: { companyId: v.string() },
   handler: async (ctx, { companyId }) => {
@@ -459,6 +476,54 @@ export const unapproveDraft = mutation({
       acknowledgedClaims: undefined,
       updatedAt: new Date().toISOString(),
     });
+  },
+});
+
+/** Remove current drafts while preserving companies and their historical runs. */
+export const deleteDrafts = mutation({
+  args: { companyIds: v.array(v.string()) },
+  returns: v.object({ deleted: v.number() }),
+  handler: async (ctx, { companyIds }) => {
+    await requireOperator(ctx);
+    const now = Date.now();
+    const selected = [];
+    for (const companyId of new Set(companyIds)) {
+      const runs = await ctx.db
+        .query('pipelineRuns')
+        .withIndex('by_company', (q) => q.eq('companyId', companyId))
+        .collect();
+      const company = await companyByExternalId(ctx, companyId);
+      const name = company?.name ?? companyId;
+      if (runs.some((run) => isActiveRun(run, now))) {
+        throw new Error(
+          `${name}: Draft generation is in progress. Wait for it to finish before deleting the draft.`,
+        );
+      }
+      if (await hasActiveSends(ctx, companyId)) {
+        throw new Error(
+          `${name} has sends queued, in flight, or awaiting review. Cancel or resolve them before deleting its draft.`,
+        );
+      }
+      selected.push({ runs, draft: await draftForCompany(ctx, companyId) });
+    }
+    let deleted = 0;
+    for (const { runs, draft } of selected) {
+      // A stale action must not recreate the draft if it eventually returns.
+      for (const run of runs) {
+        if (run.status === 'running') {
+          await ctx.db.patch(run._id, {
+            status: 'failed',
+            error: 'Run was abandoned before draft deletion.',
+            finishedAt: now,
+          });
+        }
+      }
+      if (draft !== null) {
+        await ctx.db.delete(draft._id);
+        deleted++;
+      }
+    }
+    return { deleted };
   },
 });
 

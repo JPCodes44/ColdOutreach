@@ -8,25 +8,36 @@ import { CampaignHeader } from './CampaignHeader';
 import { CampaignTable } from './CampaignTable';
 import { matchesFilter } from './status';
 import { usePipelineActions } from './usePipelineActions';
-import type {
-  CampaignCompany,
-  CampaignsScreenProps,
-  PipelineFilter,
-} from './types';
+import { OutreachReviewModal } from '../outreach-review/OutreachReviewModal';
+import type { CampaignCompany, PipelineFilter } from './types';
 
 /** Outreach pipeline: run website reviews and open each company's draft. */
-export function CampaignsScreen({ onOpenReview }: CampaignsScreenProps) {
+export function CampaignsScreen() {
   const rows = useQuery(listPipelineCompaniesQuery, {});
   const [query, setQuery] = useState('');
+  const [reviewCompany, setReviewCompany] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const [websiteReviewEnabled, setWebsiteReviewEnabled] = useState(false);
   const [filter, setFilter] = useState<PipelineFilter>('all');
   const { selectedIds, clearSelected, toggleSelected, toggleAll } =
     useSetSelection<string>();
-  const nameOf = (id: string) => rows?.find((row) => row.id === id)?.name ?? id;
+  const runnableIds = new Set(
+    (rows ?? [])
+      .filter(
+        (row) =>
+          selectedIds.has(row.id) &&
+          (row.draftState === 'none' ||
+            row.draftState === 'failed' ||
+            row.draftState === 'legacy'),
+      )
+      .map((row) => row.id),
+  );
   const actions = usePipelineActions(
     selectedIds,
+    runnableIds,
     clearSelected,
-    nameOf,
     websiteReviewEnabled,
   );
 
@@ -50,11 +61,13 @@ export function CampaignsScreen({ onOpenReview }: CampaignsScreenProps) {
         statusFilter={filter}
         onStatusFilterChange={setFilter}
         selectedCount={selectedIds.size}
+        runnableCount={runnableIds.size}
         running={actions.running}
         websiteReviewEnabled={websiteReviewEnabled}
         onWebsiteReviewChange={setWebsiteReviewEnabled}
         onRun={() => void actions.run()}
-        onDelete={actions.requestDelete}
+        onDelete={() => actions.requestDelete('companies')}
+        onDeleteDrafts={() => actions.requestDelete('drafts')}
       />
       {actions.notice !== null ? (
         <div className="campaignNotice" role="status">
@@ -74,7 +87,10 @@ export function CampaignsScreen({ onOpenReview }: CampaignsScreenProps) {
           <CampaignTable
             companies={companies}
             loading={rows === undefined}
-            onOpenReview={(id) => onOpenReview?.(id)}
+            onOpenReview={(id) => {
+              const company = rows?.find((row) => row.id === id);
+              if (company) setReviewCompany({ id, name: company.name });
+            }}
             onToggleSelected={toggleSelected}
             onToggleAll={() =>
               toggleAll(
@@ -86,9 +102,17 @@ export function CampaignsScreen({ onOpenReview }: CampaignsScreenProps) {
           />
         </div>
       </div>
+      {reviewCompany !== null ? (
+        <OutreachReviewModal
+          companyId={reviewCompany.id}
+          companyName={reviewCompany.name}
+          onClose={() => setReviewCompany(null)}
+        />
+      ) : null}
       {actions.pendingDelete !== null ? (
         <DeleteConfirmationModal
-          count={actions.pendingDelete.length}
+          count={actions.pendingDelete.ids.length}
+          target={actions.pendingDelete.kind}
           onCancel={actions.cancelDelete}
           onConfirm={() => void actions.confirmDelete()}
         />

@@ -1,7 +1,7 @@
-import { NOT_APPROVED_HINT, emailCell, isSendable } from './data';
+import { emailCell, isSendable, sendBlockHint } from './data';
 import type { DraftReviewRowProps } from './types';
 
-/** One company row; only approved drafts can be checked for sending. */
+/** One company row; generated drafts can be checked for sending. */
 export function DraftReviewRow({
   row,
   selected,
@@ -29,7 +29,7 @@ export function DraftReviewRow({
           type="checkbox"
           checked={selected}
           disabled={!sendable}
-          title={sendable ? undefined : NOT_APPROVED_HINT}
+          title={sendBlockHint(row)}
           aria-label={`Select ${row.company}`}
           onClick={(event) => event.stopPropagation()}
           onChange={() => onToggleSelected(row.companyId)}
@@ -50,7 +50,7 @@ export function DraftReviewRow({
           {row.draftLabel}
         </span>
         {sendable ? null : (
-          <span className="draftStateHint">{NOT_APPROVED_HINT}</span>
+          <span className="draftStateHint">{sendBlockHint(row)}</span>
         )}
       </div>
       <div role="cell" className="campaignCell draftColStatus">

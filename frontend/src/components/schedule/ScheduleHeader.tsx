@@ -18,7 +18,7 @@ export function ScheduleHeader({
         <div className="scheduleHeaderText">
           <h1 className="scheduleTitle">Schedule Submission</h1>
           <p className="scheduleSubtitle">
-            Choose when the approved emails are sent through Gmail.
+            Choose when the drafted emails are sent through Gmail.
           </p>
         </div>
         <div className="scheduleHeaderActions">

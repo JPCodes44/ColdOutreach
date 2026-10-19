@@ -94,6 +94,7 @@ export interface ImportWarningModalProps {
 }
 
 export interface DeleteConfirmationModalProps {
+  target?: 'companies' | 'drafts';
   /** Number of companies pending deletion. */
   count: number;
   onCancel: () => void;

@@ -8,21 +8,26 @@ import type { DeleteConfirmationModalProps } from './types';
 /** Destructive confirmation before removing companies and their drafts. */
 export function DeleteConfirmationModal({
   count,
+  target = 'companies',
   onCancel,
   onConfirm,
 }: DeleteConfirmationModalProps) {
   const noun = count === 1 ? 'company' : 'companies';
+  const draftsOnly = target === 'drafts';
   return (
     <ModalOverlay ariaLabel="Confirm delete" onDismiss={onCancel}>
       <ModalCard>
         <div className="modalContent">
           <ModalIcon icon="delete" variant="danger" />
           <h2 className="modalTitleSm">
-            Delete {count} {noun}?
+            {draftsOnly
+              ? `Delete drafts for ${count} ${noun}?`
+              : `Delete ${count} ${noun}?`}
           </h2>
           <p className="modalBody">
-            This removes the selected {noun}, their generated drafts, and run
-            history. Sent email history is kept. This can&apos;t be undone.
+            {draftsOnly
+              ? 'This removes generated drafts for the selected companies. Companies, research, recipients, and sent email history are kept. This can’t be undone.'
+              : `This removes the selected ${noun}, their generated drafts, and run history. Sent email history is kept. This can't be undone.`}
           </p>
           <ModalActions layout="row">
             <ModalButton
@@ -30,7 +35,11 @@ export function DeleteConfirmationModal({
               variant="secondary"
               onClick={onCancel}
             />
-            <ModalButton label="Delete" variant="danger" onClick={onConfirm} />
+            <ModalButton
+              label={draftsOnly ? 'Delete drafts' : 'Delete'}
+              variant="danger"
+              onClick={onConfirm}
+            />
           </ModalActions>
         </div>
       </ModalCard>

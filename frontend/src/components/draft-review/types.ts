@@ -53,7 +53,7 @@ export interface DraftReviewRowProps {
 }
 
 export interface DraftReviewScreenProps {
-  /** Advances to Schedule with the checked (approved) company ids. */
+  /** Advances to Schedule with the checked company ids. */
   onContinue?: (companyIds: string[]) => void;
   /** Returns to the Recipients screen. */
   onBack?: () => void;

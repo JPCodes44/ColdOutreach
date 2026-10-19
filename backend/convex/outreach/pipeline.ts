@@ -4,6 +4,7 @@
 
 import {
   validateOutreachContent,
+  asLetterContent,
   type OutreachEmailContent,
 } from '@emailstrat/common';
 import {
@@ -12,7 +13,6 @@ import {
   parseModelJson,
   validateAnalysis,
   validateComposition,
-  validateConcepts,
   type ValidatedAnalysis,
 } from './modelOutput';
 import {
@@ -151,6 +151,17 @@ export async function runOutreachPipeline(
       corpus,
       { includeDashboardIntro: websiteReviewEnabled },
     );
+    if (!websiteReviewEnabled) {
+      const genericSector =
+        /\b(?:(?:businesses|companies|teams|organi[sz]ations) like yours|your (?:field|industry|sector))\b/i.exec(
+          composition.solutionParagraph,
+        );
+      if (genericSector !== null) {
+        unsupportedClaims.push(
+          `generic sector wording "${genericSector[0]}"; explicitly name the sector supported by the company description or industry in the tools paragraph`,
+        );
+      }
+    }
     if (unsupportedClaims.length > 0) {
       if (attempt >= MAX_COMPOSE_ATTEMPTS) {
         throw new PipelineError(
@@ -163,12 +174,8 @@ export async function runOutreachPipeline(
       continue;
     }
 
-    if (!websiteReviewEnabled) {
-      analysis = { ...analysis, ...validateConcepts(raw, corpus) };
-    }
-
     await stage('rendering');
-    const content: OutreachEmailContent = {
+    const generated: OutreachEmailContent = {
       subject: composition.subject,
       opening: [
         composition.greeting,
@@ -190,6 +197,9 @@ export async function runOutreachPipeline(
         signatureBlock(settings) ||
         (websiteReviewEnabled ? '' : COMPANY_RESEARCH_DEFAULT_SIGNATURE),
     };
+    const content = websiteReviewEnabled
+      ? generated
+      : asLetterContent(generated);
     const issues = validateOutreachContent(content);
     if (issues.length > 0) {
       throw new PipelineError(

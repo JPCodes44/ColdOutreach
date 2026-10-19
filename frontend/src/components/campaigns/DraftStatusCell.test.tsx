@@ -15,7 +15,7 @@ describe('DraftStatusCell', () => {
           company={pipelineRow({ draftState: 'ready', websiteReviewEnabled })}
         />,
       );
-      expect(screen.getByText('Ready for review')).toBeInTheDocument();
+      expect(screen.getByText('Draft ready')).toBeInTheDocument();
       expect(screen.getByText(label)).toBeInTheDocument();
     },
   );

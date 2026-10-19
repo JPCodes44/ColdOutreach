@@ -19,14 +19,15 @@ export interface TargetEntity {
   contacts: number;
   status?: string;
   draftState?: string;
-  /** Approved draft and at least one recipient. */
+  /** Complete content and recipients, with no prior contact or active-send conflicts. */
   ready?: boolean;
+  notReadyReason?: string | null;
 }
 
 /** Aggregate counters shown in the dispatch summary panel. */
 export interface DispatchSummary {
   totalCompanies: number;
-  approvedDrafts: number;
+  readyDrafts: number;
   totalEmailsQueued: number;
 }
 
@@ -49,7 +50,7 @@ export interface ScheduleSubmissionScreenProps {
 
 export interface ScheduleHeaderProps {
   onBack?: () => void;
-  /** Queues the approved snapshots for the chosen schedule. */
+  /** Queues the saved snapshots for the chosen schedule. */
   onSchedule?: () => void;
   /** True while the enqueue mutation is in flight. */
   scheduling?: boolean;

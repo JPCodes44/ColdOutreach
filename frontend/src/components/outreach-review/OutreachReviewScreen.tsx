@@ -12,7 +12,7 @@ import { RunProgress } from './RunProgress';
 import { WorkflowDashboard } from './WorkflowDashboard';
 import type { OutreachReviewScreenProps } from './types';
 
-/** Review one company's evidence and edit/approve its outreach draft. */
+/** View one company's evidence and edit its outreach draft. */
 export function OutreachReviewScreen({
   companyId,
   onBack,
@@ -36,6 +36,7 @@ export function OutreachReviewScreen({
     try {
       const { skipped } = await requestRuns({
         companyIds: [companyId],
+        ...(review.draft !== null ? { regenerate: true } : {}),
         websiteReviewEnabled:
           review.latestRun?.websiteReviewEnabled ??
           review.draft?.websiteReviewEnabled ??
@@ -105,10 +106,13 @@ export function OutreachReviewScreen({
             ) : evidence !== null && analysis !== null ? (
               <EvidencePanel evidence={evidence} analysis={analysis} />
             ) : null}
-            <WorkflowDashboard
-              workflow={draft.content.workflow}
-              dashboard={draft.content.dashboard}
-            />
+            {draft.websiteReviewEnabled !== false &&
+            draft.content.format !== 'letter' ? (
+              <WorkflowDashboard
+                workflow={draft.content.workflow}
+                dashboard={draft.content.dashboard}
+              />
+            ) : null}
           </div>
           <DraftWorkspace
             key={draft.updatedAt}

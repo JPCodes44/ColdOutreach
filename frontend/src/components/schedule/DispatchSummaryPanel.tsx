@@ -1,12 +1,12 @@
 import { Icon } from '../outreach/Common';
 import type { DispatchSummaryProps } from './types';
 
-/** Counts of selected companies, approved drafts, and emails to queue. */
+/** Counts of selected companies, ready drafts, and emails to queue. */
 export function DispatchSummaryPanel({ summary }: DispatchSummaryProps) {
   const rows = [
     ['Total Companies', summary.totalCompanies, false],
-    ['Approved Drafts', summary.approvedDrafts, false],
-    ['Total Emails Queued', summary.totalEmailsQueued, true],
+    ['Ready to Schedule', summary.readyDrafts, false],
+    ['Emails to Schedule', summary.totalEmailsQueued, true],
   ] as const;
   return (
     <aside className="scheduleCard scheduleSummary">
@@ -31,7 +31,7 @@ export function DispatchSummaryPanel({ summary }: DispatchSummaryProps) {
           <Icon name="info" size={18} />
           <p>
             Emails are sent through Gmail at the scheduled time. Each email is
-            an immutable copy of the approved draft.
+            an immutable copy of the saved draft.
           </p>
         </div>
       </div>

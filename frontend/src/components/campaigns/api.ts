@@ -10,15 +10,22 @@ export const listPipelineCompaniesQuery = makeFunctionReference<
 /** Start background pipeline runs. Generation never sends email. */
 export const requestRunsMutation = makeFunctionReference<
   'mutation',
-  { companyIds: string[]; websiteReviewEnabled?: boolean },
+  {
+    companyIds: string[];
+    websiteReviewEnabled?: boolean;
+    regenerate?: boolean;
+  },
   { started: string[]; skipped: { companyId: string; reason: string }[] }
 >('outreachRuns:requestRuns');
+
+export const deleteDraftsMutation = makeFunctionReference<
+  'mutation',
+  { companyIds: string[] },
+  { deleted: number }
+>('outreachRuns:deleteDrafts');
 
 export const deleteCompaniesMutation = makeFunctionReference<
   'mutation',
   { externalIds: string[] },
   null
 >('companies:deleteCompanies');
-
-/** Backend refuses runs for more than this many companies per request. */
-export const MAX_RUNS_PER_REQUEST = 10;

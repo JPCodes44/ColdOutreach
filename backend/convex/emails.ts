@@ -11,8 +11,8 @@ import { draftState, type DraftState } from './outreachRuns';
 const DRAFT_LABELS: Record<DraftState, string> = {
   none: 'Not Drafted',
   running: 'Generating',
-  ready: 'Needs Approval',
-  approved: 'Approved',
+  ready: 'Draft ready',
+  approved: 'Draft ready',
   failed: 'Generation Failed',
   legacy: 'Legacy Draft',
 };
@@ -48,6 +48,11 @@ export const listEmailTableRows = query({
         email1: company.email1 ?? '',
         email2: company.email2 ?? '',
         email3: company.email3 ?? '',
+        enrichment: company.recipientEnrichment,
+        contacts: (company.apolloContacts ?? []).filter(
+          (contact) =>
+            company[contact.slot]?.trim().toLowerCase() === contact.email,
+        ),
         draftState: state,
         status:
           drafted || sendStatus !== 'Not Sent'

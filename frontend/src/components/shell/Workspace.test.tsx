@@ -43,7 +43,17 @@ describe('Workspace navigation', () => {
     ).toBeInTheDocument();
 
     await go(/Pipeline/, 'Outreach Pipeline');
-    await go(/Review/, 'Outreach Review');
+    expect(screen.queryByRole('button', { name: /^Review$/ })).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: /Email Setup/ }),
+    ).not.toBeInTheDocument();
+    const buttons = within(
+      screen.getByRole('navigation', { name: 'Primary' }),
+    ).getAllByRole('button');
+    const pipelineIndex = buttons.findIndex((button) =>
+      button.textContent?.includes('Pipeline'),
+    );
+    expect(buttons[pipelineIndex + 1]).toHaveTextContent('Recipients');
     await go(/Recipients/, 'Recipients');
     await go(/^Send$/, 'Choose Companies to Send');
     // Nothing is selectable without live data, so Continue stays disabled.
